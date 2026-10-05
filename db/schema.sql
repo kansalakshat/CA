@@ -200,6 +200,11 @@ END $$;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;
 ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
 
+-- ── Upgrade: firm contact details, asked once on the "Set up your firm" screen ──
+ALTER TABLE firms ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT '';
+ALTER TABLE firms ADD COLUMN IF NOT EXISTS email TEXT NOT NULL DEFAULT '';
+ALTER TABLE firms ADD COLUMN IF NOT EXISTS setup_done BOOLEAN NOT NULL DEFAULT false;
+
 ALTER TABLE users ALTER COLUMN firm_id SET NOT NULL;
 ALTER TABLE clients ALTER COLUMN firm_id SET NOT NULL;
 ALTER TABLE invoices ALTER COLUMN firm_id SET NOT NULL;

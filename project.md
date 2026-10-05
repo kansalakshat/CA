@@ -23,7 +23,7 @@ Optionally, it connects to **n8n** (an automation tool) to send reminders by ema
 1. Open the site and click **Sign up your firm**, or **Continue with Google**.
 2. With email and password: enter firm name, your name, email and password, then click the confirmation link that arrives by email.
 3. With Google: pick your Google account, then type your firm name.
-4. You are now the firm's **partner**.
+4. You are now the firm's **partner**. A one-time **Set up your firm** screen asks for the firm's phone/WhatsApp number and email (or click **Skip for now**). They appear at the end of the WhatsApp and email reminders you send to clients.
 
 ### Joining an existing firm
 You can't join a firm by yourself. Ask your firm's partner to add you in **Settings → Team Users**. They set a starting password and share it with you. You can change it in Settings after logging in.
@@ -81,7 +81,7 @@ Questions the agent can't handle are marked **Escalated to CA** and become tasks
 Billed vs collected for the last 6 months, on-time filing rate, share of documents received, lead conversion, average days clients take to pay, clients by service, and pipeline value by stage.
 
 ### Settings
-- **Firm & n8n** (partners): firm name and the n8n webhook address.
+- **Firm & n8n** (partners): firm name, firm phone/WhatsApp and email (shown in client reminders), and the n8n webhook address.
 - **Team Users:** see the team. Partners can add or remove people and choose Partner or Staff.
 - **Password:** change it, or set one if you only use Google.
 

@@ -1,5 +1,5 @@
 import { useApp } from '../App.jsx';
-import { fmtDate, inr, invoiceStage, mailLink, thisMonth, unpaid, waLink } from '../lib.js';
+import { fmtDate, inr, invoiceStage, mailLink, signature, thisMonth, unpaid, waLink } from '../lib.js';
 import { N8N_TEXT } from '../components.jsx';
 
 const SCHEDULE = [
@@ -59,7 +59,7 @@ function InvoiceRow({ i }) {
   const late = !i.paid_at && i.days_overdue > 0;
   const waiting = i.approval === 'pending';
   const amountColor = i.paid_at ? 'var(--text-muted)' : late ? 'var(--rose)' : 'var(--amber)';
-  const msg = `Namaste ${i.client_name}, invoice ${i.number} (${inr(i.total)}) ${late ? `${i.days_overdue} din se overdue hai` : `ki due date ${fmtDate(i.due_date)} hai`}. Kripya payment kar dein. Dhanyavaad, ${S.settings.firmName}`;
+  const msg = `Namaste ${i.client_name}, invoice ${i.number} (${inr(i.total)}) ${late ? `${i.days_overdue} din se overdue hai` : `ki due date ${fmtDate(i.due_date)} hai`}. Kripya payment kar dein. ${signature(S)}`;
 
   async function approve() {
     const r = await act('POST', `/api/invoices/${i.id}/approve`);

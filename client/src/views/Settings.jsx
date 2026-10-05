@@ -29,15 +29,28 @@ export default function Settings() {
 function FirmSettings() {
   const { S, act } = useApp();
   const [firmName, setFirmName] = useState(S.settings.firmName);
+  const [phone, setPhone] = useState(S.settings.phone);
+  const [email, setEmail] = useState(S.settings.email);
   const [n8nBaseUrl, setN8nBaseUrl] = useState(S.settings.n8nBaseUrl);
 
   return (
-    <form className="panel" onSubmit={e => { e.preventDefault(); act('PATCH', '/api/settings', { firmName, n8nBaseUrl }, 'Settings saved'); }}>
+    <form className="panel" onSubmit={e => { e.preventDefault(); act('PATCH', '/api/settings', { firmName, phone, email, n8nBaseUrl }, 'Settings saved'); }}>
       <div className="panel-title">🏢 Firm & n8n</div>
       <label className="form-group" style={{ display: 'block' }}>
         <span className="form-label">Firm name</span>
         <input className="form-input" required maxLength={100} value={firmName} onChange={e => setFirmName(e.target.value)} />
       </label>
+      <div className="form-row">
+        <label className="form-group" style={{ display: 'block' }}>
+          <span className="form-label">Firm phone / WhatsApp</span>
+          <input className="form-input" type="tel" maxLength={20} placeholder="+91 98765 43210" value={phone} onChange={e => setPhone(e.target.value)} />
+        </label>
+        <label className="form-group" style={{ display: 'block' }}>
+          <span className="form-label">Firm email</span>
+          <input className="form-input" type="email" maxLength={200} placeholder="office@yourfirm.in" value={email} onChange={e => setEmail(e.target.value)} />
+        </label>
+      </div>
+      <div className="text-xs text-muted" style={{ marginTop: -6, marginBottom: 12 }}>Shown at the end of WhatsApp and email reminders to clients.</div>
       <label className="form-group" style={{ display: 'block' }}>
         <span className="form-label">n8n webhook base URL (leave empty if n8n is not set up)</span>
         <input className="form-input" placeholder="http://localhost:5678/webhook" value={n8nBaseUrl} onChange={e => setN8nBaseUrl(e.target.value)} />

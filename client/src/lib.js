@@ -29,7 +29,13 @@ export const waLink = (phone, text) => `https://wa.me/${waNumber(phone)}?text=${
 export const mailLink = (email, subject, body) =>
   `mailto:${encodeURIComponent(email)}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body)}`;
 
-export const outstandingDocs = (S, clientId) => S.documents.filter(d => d.client_id === clientId && d.status !== 'received');
+// How reminder messages to clients end: "Dhanyavaad, Kansal & Associates (+91 98765 43210, office@kansal.in)".
+export const signature = S => {
+  const contact = [S.settings.phone, S.settings.email].filter(Boolean).join(', ');
+  return `Dhanyavaad, ${S.settings.firmName}${contact ? ` (${contact})` : ''}`;
+};
+
+export const outstandingDocs =(S, clientId) => S.documents.filter(d => d.client_id === clientId && d.status !== 'received');
 export const unpaid = S => S.invoices.filter(i => !i.paid_at);
 export const unfiled = S => S.filings.filter(f => !f.filed_at);
 export const overdue = S => unpaid(S).filter(i => i.days_overdue > 0 && i.approval !== 'pending');

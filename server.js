@@ -494,7 +494,7 @@ const routes = {
   // ponytail: loads all rows; add pagination if a firm grows past a few thousand records.
   'GET /api/state': async ({ user, firmId }) => {
     const [firm, users, clients, invoices, documents, filings, leads, tasks, messages, stats] = await Promise.all([
-      get('SELECT name, n8n_base_url FROM firms WHERE id = ?', firmId),
+      get('SELECT name, phone, email, n8n_base_url, setup_done FROM firms WHERE id = ?', firmId),
       all('SELECT id, name, email, role FROM users WHERE firm_id = ? ORDER BY name', firmId),
       all('SELECT * FROM clients WHERE firm_id = ? ORDER BY created_at DESC, id DESC', firmId),
       all(`${INVOICE_SQL} WHERE i.firm_id = ? ORDER BY i.paid_at IS NOT NULL, i.due_date`, firmId),
@@ -510,7 +510,7 @@ const routes = {
     ]);
     return {
       me: user, users,
-      settings: { firmName: firm.name, n8nBaseUrl: firm.n8n_base_url },
+      settings: { firmName: firm.name, phone: firm.phone, email: firm.email, n8nBaseUrl: firm.n8n_base_url, setupDone: firm.setup_done },
       clients, invoices, documents, filings, leads, tasks,
       messageCount: messages.n, agentStats: stats,
     };
@@ -680,13 +680,21 @@ const routes = {
     return { ok: true };
   },
 
+  // Firm details. Everything is checked first, so a bad field never leaves a half-saved update.
   'PATCH /api/settings': async ({ body: b, firmId }) => {
-    if ('firmName' in b) await run('UPDATE firms SET name = ? WHERE id = ?', str(b.firmName, 'firmName', { required: true, max: 100 }), firmId);
-    if ('n8nBaseUrl' in b) {
-      const u = str(b.n8nBaseUrl, 'n8nBaseUrl', { max: 300 }).replace(/\/$/, '');
-      if (u && !/^https?:\/\/[^\s]+$/i.test(u)) throw new HttpError(400, 'n8n URL must start with http:// or https://');
-      await run('UPDATE firms SET n8n_base_url = ? WHERE id = ?', u, firmId);
+    const changes = {};
+    if ('firmName' in b) changes.name = str(b.firmName, 'Firm name', { required: true, max: 100 });
+    if ('phone' in b) {
+      changes.phone = str(b.phone, 'Phone', { max: 20 });
+      if (changes.phone && !/^\+?[\d\s-]{7,20}$/.test(changes.phone)) throw new HttpError(400, 'Phone should be a number like +91 98765 43210');
     }
+    if ('email' in b) changes.email = email(b.email, 'Firm email', { max: 200 });
+    if ('n8nBaseUrl' in b) {
+      changes.n8n_base_url = str(b.n8nBaseUrl, 'n8nBaseUrl', { max: 300 }).replace(/\/$/, '');
+      if (changes.n8n_base_url && !/^https?:\/\/[^\s]+$/i.test(changes.n8n_base_url)) throw new HttpError(400, 'n8n URL must start with http:// or https://');
+    }
+    if (b.setupDone === true) changes.setup_done = true;   // the one-time "Set up your firm" screen was saved or skipped
+    for (const [column, value] of Object.entries(changes)) await run(`UPDATE firms SET ${column} = ? WHERE id = ?`, value, firmId);
     return { ok: true };
   },
 

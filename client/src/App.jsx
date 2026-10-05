@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useRef, useState } f
 import { api, overdue, outstandingDocs, unfiled, groupFilings, fmtDate, inr, todayIso } from './lib.js';
 import { ClientModal, InvoiceModal, FilingModal, LeadModal } from './components.jsx';
 import Login from './views/Login.jsx';
+import FirmSetup from './views/FirmSetup.jsx';
 import Dashboard from './views/Dashboard.jsx';
 import Agent from './views/Agent.jsx';
 import Documents from './views/Documents.jsx';
@@ -95,6 +96,8 @@ export default function App() {
   if (!auth) return null;
   if (!auth.user) return <Login googleEnabled={auth.googleEnabled} pendingSignup={auth.pendingSignup} notice={loginNotice} onDone={checkAuth} />;
   if (!S) return <div className="login-wrap" style={{ color: 'white' }}>Loading…</div>;
+  // A new firm's partner fills in contact details once (or skips).
+  if (S.me.role === 'partner' && !S.settings.setupDone) return <FirmSetup S={S} onDone={reload} />;
 
   const ctx = { S, reload, act, toast: setToastMsg, openModal: setModal, go: setView, logout: () => api('POST', '/api/auth/logout').then(checkAuth) };
   const View = VIEWS[view].component;

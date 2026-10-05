@@ -94,6 +94,16 @@ async function main() {
   assert(apiKey && apiKey !== FIXTURE_KEY, 'each firm gets its own API key');
   assert.deepEqual(s.clients, [], "a new firm sees none of the other firm's clients");
 
+  // ── Firm setup step (contact details) ──
+  assert.deepEqual([s.settings.setupDone, s.settings.phone, s.settings.email], [false, '', ''], 'new firm starts with setup not done');
+  assert.equal((await partner('PATCH', '/api/settings', { firmName: 'Renamed', phone: 'call me maybe', setupDone: true })).status, 400, 'bad phone rejected');
+  assert.equal((await partner('PATCH', '/api/settings', { email: 'not-an-email' })).status, 400, 'bad email rejected');
+  s = (await partner('GET', '/api/state')).data;
+  assert.deepEqual([s.settings.firmName, s.settings.setupDone], ['Alpha CA', false], 'nothing saved when a field is invalid');
+  assert.equal((await partner('PATCH', '/api/settings', { phone: '+91 98765 43210', email: 'Office@Alpha.in', setupDone: true })).status, 200);
+  s = (await partner('GET', '/api/state')).data;
+  assert.deepEqual([s.settings.phone, s.settings.email, s.settings.setupDone], ['+91 98765 43210', 'office@alpha.in', true]);
+
   assert.equal((await partner('POST', '/api/users', { name: 'Staff', email: 'S@x.in', password: 'staffpass1', role: 'staff' })).status, 200);
   assert.equal((await partner('POST', '/api/users', { name: 'Dup', email: 's@x.in', password: 'staffpass1' })).status, 400, 'duplicate email rejected');
   assert.equal((await staff('POST', '/api/auth/login', { email: 's@x.in', password: 'wrong' })).status, 401);

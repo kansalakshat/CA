@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useApp } from '../App.jsx';
-import { avatarStyle, initials, mailLink, waLink } from '../lib.js';
+import { avatarStyle, initials, mailLink, signature, waLink } from '../lib.js';
 
 const FILTERS = [['all', 'All Clients'], ['missing', 'Missing Docs'], ['pending', 'Pending Verify'], ['complete', 'Complete']];
 const NEXT_STATUS = { missing: 'pending', pending: 'received', received: 'missing' };
@@ -48,7 +48,7 @@ function ClientDocs({ c, docs, missing, pending, received }) {
   const complete = docs.length > 0 && !outstanding.length;
   const pct = docs.length ? Math.round(received / docs.length * 100) : 0;
   const reminders = Math.max(0, ...outstanding.map(d => d.reminder_count));
-  const msg = `Namaste ${c.name}, kripya ye documents bhej dein: ${outstanding.map(d => d.name).join(', ')}. Dhanyavaad, ${S.settings.firmName}`;
+  const msg = `Namaste ${c.name}, kripya ye documents bhej dein: ${outstanding.map(d => d.name).join(', ')}. ${signature(S)}`;
   const remind = () => act('POST', '/api/documents/remind', { clientId: c.id });
 
   async function addDoc(e) {
