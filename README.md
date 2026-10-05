@@ -25,7 +25,7 @@ Needs Node.js 22.13 or newer (`node -v` to check).
 
 | Command | What it does |
 |---|---|
-| `npm start` | Runs the CRM at http://localhost:3000 |
+| `npm start` | Runs the CRM at http://localhost:3000 (restarts by itself when `server.js` changes) |
 | `npm run build` | Rebuilds the React app after you change files in `client/` |
 | `npm run dev` | For editing the UI: live reload at http://localhost:5173 (keep `npm start` running in another window) |
 | `npm test` | Tests the whole API on a throwaway in-memory Postgres (Supabase is not touched) |

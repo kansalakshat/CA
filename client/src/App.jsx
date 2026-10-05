@@ -112,8 +112,9 @@ export default function App() {
   if (!auth) return null;
   if (!auth.user) return <Login googleEnabled={auth.googleEnabled} pendingSignup={auth.pendingSignup} notice={loginNotice} onDone={checkAuth} />;
   if (!S) return <ShellSkeleton />;
-  // A new firm's partner fills in contact details once (or skips).
-  if (S.me.role === 'partner' && !S.settings.setupDone) return <FirmSetup S={S} onDone={reload} />;
+  // A new firm's partner fills in contact details once (or skips). Only an explicit `false` counts: a server
+  // that doesn't send the flag must not trap people on this screen.
+  if (S.me.role === 'partner' && S.settings.setupDone === false) return <FirmSetup S={S} onDone={reload} />;
 
   const go = id => { setView(id); setNavOpen(false); window.scrollTo(0, 0); };
   const ctx = { S, reload, act, toast: setToastMsg, openModal: setModal, go, logout: () => api('POST', '/api/auth/logout').then(checkAuth) };
