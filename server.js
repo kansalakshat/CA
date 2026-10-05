@@ -17,13 +17,15 @@ const HIGH_VALUE = 50000;                              // invoices above this ne
 const TZ = 'Asia/Kolkata';                             // ponytail: one firm, one timezone; make it a setting if offices span zones
 
 // ── Database ────────────────────────────────────────────────────────────────
-if (!process.env.DATABASE_URL) {
+// Missing DATABASE_URL: locally, stop with a hint; on Vercel, every API call answers with the hint instead of crashing.
+const DB_MISSING = !process.env.DATABASE_URL;
+if (DB_MISSING && require.main === module) {
   console.error('DATABASE_URL is not set. Copy .env.example to .env and paste your Supabase connection string.');
   process.exit(1);
 }
 types.setTypeParser(20, Number);     // count(*) / sum() come back as bigint; numbers here are small
 types.setTypeParser(1700, Number);   // avg() comes back as numeric
-const isLocalDb = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL);
+const isLocalDb = /@(localhost|127\.0\.0\.1)[:/]/.test(process.env.DATABASE_URL || '');
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
   // ponytail: encrypted but the certificate is not verified; for full verification download
@@ -46,7 +48,7 @@ const setSetting = (key, value) => run('INSERT INTO settings (key, value) VALUES
 let initPromise = null;
 const init = () => (initPromise ||= (async () => {
   if (!(await getSetting('api_key'))) await setSetting('api_key', crypto.randomBytes(24).toString('hex'));
-  if (!(await getSetting('firm_name'))) await setSetting('firm_name', 'Sharma & Associates');
+  if (!(await getSetting('firm_name'))) await setSetting('firm_name', ' CA Automation');
   if (!(await getSetting('n8n_base_url')) && process.env.N8N_BASE_URL) await setSetting('n8n_base_url', process.env.N8N_BASE_URL.replace(/\/$/, ''));
 })().catch(e => { initPromise = null; throw e; }));
 
@@ -560,6 +562,7 @@ async function handler(req, res) {
     if (req.method !== 'GET' && req.headers['content-type'] && !req.headers['content-type'].startsWith('application/json'))
       throw new HttpError(415, 'Send JSON');
 
+    if (DB_MISSING) throw new HttpError(500, 'DATABASE_URL is not set. Add it in Vercel > Project > Settings > Environment Variables, then redeploy.');
     await init();
 
     let user = null;
@@ -579,7 +582,12 @@ async function handler(req, res) {
     send(res, 200, await m.handler({ body, params, url, user, req, res }));
   } catch (e) {
     if (!(e instanceof HttpError)) console.error(e);
-    send(res, e.status || 500, { error: e instanceof HttpError ? e.message : 'Server error' });
+    // Connection problems (wrong password, unreachable host) get a readable hint; other details stay in the server log.
+    const dbDown = !(e instanceof HttpError) && (['28P01', 'ENOTFOUND', 'ECONNREFUSED', 'ETIMEDOUT'].includes(e.code) || /Tenant or user not found|password authentication|connect/i.test(e.message));
+    const message = e instanceof HttpError ? e.message
+      : dbDown ? 'Cannot connect to the database. Check DATABASE_URL (Supabase Transaction pooler string with the right password).'
+      : 'Server error';
+    send(res, e.status || (dbDown ? 503 : 500), { error: message });
   }
 }
 
