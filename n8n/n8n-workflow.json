@@ -25,7 +25,7 @@
               "id": "inv-client",
               "name": "clientName",
               "type": "string",
-              "value": "={{ $json.body?.clientName ?? \"Sharma Traders Pvt Ltd\" }}"
+              "value": "={{ $json.body?.clientName ?? \"CA Automation\" }}"
             },
             {
               "id": "inv-email",

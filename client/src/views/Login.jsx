@@ -34,7 +34,7 @@ export default function Login({ needsSetup, onDone }) {
             <p className="text-sm text-muted" style={{ marginBottom: 14 }}>First time here. This account will be the admin (partner). You can add staff later in Settings.</p>
             <label className="form-group" style={{ display: 'block' }}>
               <span className="form-label">Your name</span>
-              <input className="form-input" name="name" required maxLength={200} placeholder="CA Rajesh Sharma" autoFocus />
+              <input className="form-input" name="name" required maxLength={200} placeholder="CA Akshat Kansal" autoFocus />
             </label>
           </>
         )}
