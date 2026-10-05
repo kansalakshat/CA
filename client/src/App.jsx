@@ -48,11 +48,19 @@ function useClickOutside(ref, onOutside) {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState(null);      // { user }
+  const [auth, setAuth] = useState(null);      // { user, googleEnabled, pendingSignup }
   const [S, setS] = useState(null);            // everything from /api/state
   const [view, setView] = useState('dashboard');
   const [modal, setModal] = useState(null);
-  const [toastMsg, setToastMsg] = useState('');
+  // The server redirects back with ?verified=1, ?verify_error=1 or ?google_error=1. Read once, then clean the address bar.
+  const [toastMsg, setToastMsg] = useState(() => (new URLSearchParams(window.location.search).has('verified') ? 'Email confirmed. Welcome!' : ''));
+  const [loginNotice] = useState(() => {
+    const p = new URLSearchParams(window.location.search);
+    if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
+    if (p.has('verify_error')) return 'That confirmation link is invalid or has expired. Log in to get a new one.';
+    if (p.has('google_error')) return 'Google sign-in did not work. Please try again.';
+    return '';
+  });
 
   const checkAuth = useCallback(() => api('GET', '/api/auth/status').then(setAuth).catch(() => setAuth({ user: null })), []);
   useEffect(() => { checkAuth(); }, [checkAuth]);
@@ -64,9 +72,9 @@ export default function App() {
   }, [toastMsg]);
 
   const handleError = useCallback(e => {
-    if (e.status === 401) { setS(null); setAuth({ user: null }); }
+    if (e.status === 401) { setS(null); checkAuth(); }
     else setToastMsg('⚠️ ' + e.message);
-  }, []);
+  }, [checkAuth]);
 
   const reload = useCallback(async () => {
     try { setS(await api('GET', '/api/state')); } catch (e) { handleError(e); }
@@ -85,7 +93,7 @@ export default function App() {
   }, [reload, handleError]);
 
   if (!auth) return null;
-  if (!auth.user) return <Login onDone={checkAuth} />;
+  if (!auth.user) return <Login googleEnabled={auth.googleEnabled} pendingSignup={auth.pendingSignup} notice={loginNotice} onDone={checkAuth} />;
   if (!S) return <div className="login-wrap" style={{ color: 'white' }}>Loading…</div>;
 
   const ctx = { S, reload, act, toast: setToastMsg, openModal: setModal, go: setView, logout: () => api('POST', '/api/auth/logout').then(checkAuth) };

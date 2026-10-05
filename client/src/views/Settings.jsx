@@ -119,8 +119,9 @@ function Users() {
 }
 
 function ChangePassword() {
-  const { toast } = useApp();
+  const { S, toast } = useApp();
   const [error, setError] = useState('');
+  const hasPassword = S.me.has_password;   // false for people who only sign in with Google
 
   async function submit(e) {
     e.preventDefault();
@@ -128,20 +129,21 @@ function ChangePassword() {
     setError('');
     try {
       await api('POST', '/api/auth/password', { current, next });
-      toast('Password changed. Please log in again.');
+      toast(hasPassword ? 'Password changed. Please log in again.' : 'Password set. Please log in again.');
       setTimeout(() => window.location.reload(), 1200);
     } catch (x) { setError(x.message); }
   }
 
   return (
     <form className="panel" onSubmit={submit}>
-      <div className="panel-title">🔒 Change Your Password</div>
+      <div className="panel-title">🔒 {hasPassword ? 'Change Your Password' : 'Set a Password'}</div>
+      {!hasPassword && <div className="text-xs text-muted" style={{ marginBottom: 10 }}>You sign in with Google. A password lets you log in with your email too.</div>}
       <div className="form-row">
-        <input className="form-input" name="current" type="password" placeholder="Current password" required autoComplete="current-password" aria-label="Current password" />
+        {hasPassword && <input className="form-input" name="current" type="password" placeholder="Current password" required autoComplete="current-password" aria-label="Current password" />}
         <input className="form-input" name="next" type="password" placeholder="New password (8+)" required minLength={8} autoComplete="new-password" aria-label="New password" />
       </div>
       <div className="form-error">{error}</div>
-      <button className="btn btn-outline">Change password</button>
+      <button className="btn btn-outline">{hasPassword ? 'Change password' : 'Set password'}</button>
     </form>
   );
 }

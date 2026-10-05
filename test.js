@@ -2,6 +2,7 @@
 // Run: npm test
 const assert = require('node:assert');
 const { spawn } = require('node:child_process');
+const http = require('node:http');
 const fs = require('node:fs');
 const path = require('node:path');
 const { PGlite } = require('@electric-sql/pglite');
@@ -11,20 +12,46 @@ const PORT = 3999;
 const DB_PORT = 5499;
 const BASE = `http://127.0.0.1:${PORT}`;
 const FIXTURE_KEY = 'fixture-firm-api-key-0000000000000000';   // the other firm already in the database
+const GOOGLE_PORT = 5599;
+let googleUser = null;   // what the fake Google token endpoint says about the person signing in
+let serverLog = '';      // server output; local runs print emails here instead of sending them
 
-// Minimal cookie-keeping client, one per "browser".
+// Minimal cookie-keeping client, one per "browser". Redirects are not followed, so tests can check them.
 function client() {
-  let cookie = '';
+  const jar = {};
   return async (method, url, body, headers = {}) => {
-    const r = await fetch(BASE + url, {
-      method,
+    const cookie = Object.entries(jar).map(([k, v]) => k + '=' + v).join('; ');
+    const r = await fetch(url.startsWith('http') ? url : BASE + url, {
+      method, redirect: 'manual',
       headers: { ...(body ? { 'content-type': 'application/json' } : {}), ...(cookie ? { cookie } : {}), ...headers },
       body: body && JSON.stringify(body),
     });
-    const set = r.headers.get('set-cookie');
-    if (set) cookie = set.split(';')[0];
-    return { status: r.status, data: await r.json().catch(() => null) };
+    for (const c of r.headers.getSetCookie()) {
+      const [pair] = c.split(';');
+      const [k, v] = [pair.slice(0, pair.indexOf('=')), pair.slice(pair.indexOf('=') + 1)];
+      if (/Max-Age=0/.test(c) || !v) delete jar[k]; else jar[k] = v;
+    }
+    return { status: r.status, location: r.headers.get('location'), data: await r.json().catch(() => null) };
   };
+}
+
+// The newest confirmation link emailed to this address (read from the server's console output).
+async function emailLink(to) {
+  for (let i = 0; i < 40; i++) {
+    const at = serverLog.lastIndexOf('[email] to=' + to + ' ');
+    const m = at >= 0 && /\/api\/auth\/verify\?token=[a-f0-9]{64}/.exec(serverLog.slice(at));
+    if (m) return m[0];
+    await new Promise(r => setTimeout(r, 50));
+  }
+  throw new Error('no email found for ' + to);
+}
+
+// Sign up a firm and click the emailed confirmation link (which logs the browser in).
+async function signupVerified(browser, data) {
+  const r = await browser('POST', '/api/auth/signup', data);
+  assert.equal(r.status, 200, 'signup ' + data.email + ': ' + JSON.stringify(r.data));
+  const v = await browser('GET', await emailLink(data.email.toLowerCase()));
+  assert.deepEqual([v.status, v.location], [302, '/?verified=1']);
 }
 
 async function main() {
@@ -37,8 +64,24 @@ async function main() {
   assert.equal((await anon('GET', '/api/auth/status')).data.user, null);
   assert.equal((await partner('POST', '/api/auth/signup', { firmName: 'Alpha CA', name: 'P', email: 'p@x.in', password: 'short' })).status, 400, 'short password rejected');
   assert.equal((await partner('POST', '/api/auth/signup', { name: 'P', email: 'p@x.in', password: 'partnerpass' })).status, 400, 'firm name required');
-  assert.equal((await partner('POST', '/api/auth/signup', { firmName: 'Alpha CA', name: 'Partner', email: 'p@x.in', password: 'partnerpass' })).status, 200);
+  const signup = await partner('POST', '/api/auth/signup', { firmName: 'Alpha CA', name: 'Partner', email: 'p@x.in', password: 'partnerpass' });
+  assert.deepEqual([signup.status, signup.data], [200, { verify: true, email: 'p@x.in' }]);
+  assert.equal((await partner('GET', '/api/state')).status, 401, 'no session until the email is confirmed');
   assert.equal((await anon('POST', '/api/auth/signup', { firmName: 'Copycat', name: 'X', email: 'P@x.in', password: 'whatever1' })).status, 400, 'email already used');
+
+  // ── Email verification ──
+  const notYet = await partner('POST', '/api/auth/login', { email: 'p@x.in', password: 'partnerpass' });
+  assert.deepEqual([notYet.status, notYet.data.code], [403, 'email_not_verified'], 'cannot log in before confirming');
+  const firstLink = await emailLink('p@x.in');
+  assert.equal((await anon('POST', '/api/auth/resend-verification', { email: 'p@x.in' })).data.ok, true);
+  assert.equal((await anon('POST', '/api/auth/resend-verification', { email: 'nobody@x.in' })).data.ok, true, 'same answer for unknown emails');
+  const secondLink = await emailLink('p@x.in');
+  assert.notEqual(firstLink, secondLink, 'resend sends a fresh link');
+  assert.equal((await anon('GET', '/api/auth/verify?token=' + 'a'.repeat(64))).location, '/?verify_error=1', 'made-up token rejected');
+  const verified = await partner('GET', secondLink);
+  assert.deepEqual([verified.status, verified.location], [302, '/?verified=1']);
+  assert.equal((await anon('GET', firstLink)).location, '/?verify_error=1', 'old links stop working once confirmed');
+  assert.equal((await anon('GET', secondLink)).location, '/?verify_error=1', 'a link works only once');
   let s = (await partner('GET', '/api/state')).data;
   assert.equal(s.me.role, 'partner');
   assert.equal(s.settings.firmName, 'Alpha CA');
@@ -152,7 +195,7 @@ async function main() {
 
   // ── Isolation: a second firm can't read or change Alpha's data ──
   const beta = client();
-  assert.equal((await beta('POST', '/api/auth/signup', { firmName: 'Beta CA', name: 'Beta', email: 'b@y.in', password: 'betapass1' })).status, 200);
+  await signupVerified(beta, { firmName: 'Beta CA', name: 'Beta', email: 'b@y.in', password: 'betapass1' });
   const bs = (await beta('GET', '/api/state')).data;
   for (const key of ['clients', 'invoices', 'documents', 'filings', 'leads', 'tasks']) assert.deepEqual(bs[key], [], 'Beta sees no ' + key);
   assert.deepEqual(bs.users.map(u => u.email), ['b@y.in'], 'Beta sees only its own users');
@@ -195,6 +238,50 @@ async function main() {
   await beta('PATCH', '/api/settings', { firmName: 'Beta Renamed' });
   assert.equal((await partner('GET', '/api/state')).data.settings.firmName, 'Alpha CA', 'settings are per firm');
 
+  // ── Google sign-in (against a fake Google token endpoint) ──
+  assert.equal((await anon('GET', '/api/auth/status')).data.googleEnabled, true);
+  const g = client();
+  const start = await g('GET', '/api/auth/google/start');
+  assert.equal(start.status, 302);
+  const auth = new URL(start.location);
+  assert.equal(auth.origin + auth.pathname, 'https://accounts.google.com/o/oauth2/v2/auth');
+  assert.equal(auth.searchParams.get('redirect_uri'), BASE + '/api/auth/google/callback');
+  const state = auth.searchParams.get('state');
+  assert.equal((await g('GET', '/api/auth/google/callback?code=x&state=' + 'b'.repeat(64))).location, '/?google_error=1', 'wrong state rejected');
+  // New person: Google identity is remembered, then they name their firm.
+  googleUser = { sub: 'g-1', email: 'Gee@Gmail.com', name: 'Gee Kay', email_verified: true };
+  await g('GET', '/api/auth/google/start');
+  const st2 = new URL((await g('GET', '/api/auth/google/start')).location).searchParams.get('state');
+  const cb = await g('GET', '/api/auth/google/callback?code=abc&state=' + st2);
+  assert.deepEqual([cb.status, cb.location], [302, '/']);
+  assert.deepEqual((await g('GET', '/api/auth/status')).data.pendingSignup, { email: 'gee@gmail.com', name: 'Gee Kay' });
+  assert.equal((await g('GET', '/api/state')).status, 401, 'not logged in until the firm is named');
+  assert.equal((await g('POST', '/api/auth/google/complete', { firmName: '' })).status, 400);
+  assert.equal((await g('POST', '/api/auth/google/complete', { firmName: 'Gamma CA' })).status, 200);
+  const gs = (await g('GET', '/api/state')).data;
+  assert.deepEqual([gs.settings.firmName, gs.me.role, gs.me.has_password, gs.clients.length], ['Gamma CA', 'partner', false, 0]);
+  assert.equal((await g('GET', '/api/auth/status')).data.pendingSignup, null, 'pending signup used up');
+  assert.equal((await anon('POST', '/api/auth/login', { email: 'gee@gmail.com', password: 'anything1' })).status, 401, 'Google-only account has no password');
+  // Returning Google user logs straight in.
+  const g2 = client();
+  const st3 = new URL((await g2('GET', '/api/auth/google/start')).location).searchParams.get('state');
+  assert.equal((await g2('GET', '/api/auth/google/callback?code=abc&state=' + st3)).location, '/');
+  assert.equal((await g2('GET', '/api/state')).data.settings.firmName, 'Gamma CA');
+  // Google email that matches an existing password account: links to it and logs in.
+  googleUser = { sub: 'g-2', email: 'p@x.in', name: 'Partner', email_verified: true };
+  const g3 = client();
+  const st4 = new URL((await g3('GET', '/api/auth/google/start')).location).searchParams.get('state');
+  assert.equal((await g3('GET', '/api/auth/google/callback?code=abc&state=' + st4)).location, '/');
+  assert.equal((await g3('GET', '/api/state')).data.settings.firmName, 'Alpha CA', 'linked to the existing Alpha account');
+  // Google says the email is not verified: refused.
+  googleUser = { sub: 'g-3', email: 'shady@x.in', name: 'Shady', email_verified: false };
+  const g4 = client();
+  const st5 = new URL((await g4('GET', '/api/auth/google/start')).location).searchParams.get('state');
+  assert.equal((await g4('GET', '/api/auth/google/callback?code=abc&state=' + st5)).location, '/?google_error=1');
+  // Google-only user can set a password, then log in with it.
+  assert.equal((await g('POST', '/api/auth/password', { next: 'geepassword1' })).status, 200);
+  assert.equal((await anon('POST', '/api/auth/login', { email: 'gee@gmail.com', password: 'geepassword1' })).status, 200);
+
   // ── Users: partner removes staff (who has an approval? no; partner approved) ──
   assert.equal((await partner('DELETE', `/api/users/${s.me.id}`)).status, 400, 'cannot remove yourself');
   assert.equal((await partner('DELETE', `/api/users/${staffId}`)).status, 200);
@@ -232,17 +319,30 @@ async function main() {
   const dbServer = new PGLiteSocketServer({ db, port: DB_PORT, host: '127.0.0.1', maxConnections: 10 });
   await dbServer.start();
 
+  // Fake Google token endpoint: answers with an ID token for whoever googleUser is.
+  const fakeGoogle = http.createServer((req, res) => {
+    const b64 = o => Buffer.from(JSON.stringify(o)).toString('base64url');
+    const claims = { iss: 'https://accounts.google.com', aud: 'test-client-id', exp: Math.floor(Date.now() / 1000) + 3600, ...googleUser };
+    res.writeHead(googleUser ? 200 : 400, { 'content-type': 'application/json' });
+    res.end(JSON.stringify(googleUser ? { id_token: b64({ alg: 'none' }) + '.' + b64(claims) + '.sig' } : { error: 'invalid_grant' }));
+  }).listen(GOOGLE_PORT);
+
   const server = spawn(process.execPath, [path.join(__dirname, 'server.js')], {
-    env: { ...process.env, PORT: String(PORT), DATABASE_URL: `postgresql://postgres:postgres@127.0.0.1:${DB_PORT}/postgres`, N8N_BASE_URL: '', PG_POOL_MAX: '4', VERCEL: '' },
+    env: {
+      ...process.env, PORT: String(PORT), DATABASE_URL: `postgresql://postgres:postgres@127.0.0.1:${DB_PORT}/postgres`,
+      PG_POOL_MAX: '4', VERCEL: '', SMTP_HOST: '', APP_URL: BASE,
+      GOOGLE_CLIENT_ID: 'test-client-id', GOOGLE_CLIENT_SECRET: 'test-secret', GOOGLE_TOKEN_URL: `http://127.0.0.1:${GOOGLE_PORT}/token`,
+    },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   let started = false;
   server.stdout.on('data', async chunk => {
+    serverLog += chunk;
     if (started || !String(chunk).includes('Database:')) return;
     started = true;
     try { await main(); }
     catch (e) { console.error('FAILED:', e.stack || e.message); process.exitCode = 1; }
-    finally { server.kill(); await dbServer.stop(); await db.close(); }
+    finally { server.kill(); fakeGoogle.close(); await dbServer.stop(); await db.close(); }
   });
   server.on('exit', code => { if (!started) { console.error('Server exited early with code', code); process.exitCode = 1; dbServer.stop(); } });
 })();

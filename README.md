@@ -36,7 +36,7 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 
 1. Push the project to GitHub (`.env` is ignored, so your password is not uploaded).
 2. In Vercel: **Add New → Project** → import the repo. The settings come from `vercel.json`, so leave them as they are.
-3. Under **Environment Variables**, add `DATABASE_URL` (the same Transaction pooler string as in `.env`).
+3. Under **Environment Variables**, add `DATABASE_URL` (the same Transaction pooler string as in `.env`), the `SMTP_*` / `EMAIL_FROM` email settings, and optionally `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Without email settings, new sign-ups are paused on Vercel (existing users can still log in).
 4. Click **Deploy**. Open the site and sign up your firm (or log in).
 
 ## Files
@@ -54,10 +54,30 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 | `n8n/n8n-workflow.json` | Your n8n workflow, connected to this CRM |
 | `n8n/template.json` | Original n8n template from Notion (input for `n8n/make-workflow.js`) |
 
+## Sign-up email (confirmation links)
+
+New firms that sign up with email + password get a confirmation link and must click it before they can log in.
+
+- **Gmail (simplest):** turn on 2-Step Verification for the Google account, then create an **App password** (Google Account → Security → App passwords). Set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER` = the Gmail address, `SMTP_PASS` = the 16-character app password. Gmail allows about 500 emails a day.
+- **Any other SMTP service** (Resend, Brevo, Zoho, your domain's mail) works the same way with its host, port, user and password.
+- **Locally without SMTP**, emails are printed in the terminal running `npm start`, so you can click the link there.
+
+## Google sign-in
+
+Optional; the "Continue with Google" button appears once both settings are present.
+
+1. Google Cloud Console → **APIs & Services → OAuth consent screen**: app name, support email, scopes `email`, `profile`, `openid`. Publish it ("In production") so anyone can sign in.
+2. **Credentials → Create credentials → OAuth client ID → Web application**. Authorised redirect URIs:
+   - `https://ca-0s.vercel.app/api/auth/google/callback`
+   - `http://localhost:3000/api/auth/google/callback` (for local testing)
+3. Put the client ID and secret in `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` (in `.env` and in Vercel).
+
+How it behaves: a Google email that already has an account logs straight into it. A new email is asked for a firm name, then the firm is created. People who only use Google can set a password later in Settings.
+
 ## Firms and users
 
 - **New CA firm**: clicks **Sign up your firm** on the login page. That creates the firm and makes the person its partner.
-- **Joining an existing firm**: the firm's partner adds them in **Settings → Team Users**. People cannot join a firm on their own.
+- **Joining an existing firm**: the firm's partner adds them in **Settings → Team Users**. People cannot join a firm on their own. Their email counts as verified because the partner vouches for it.
 - **Data is per firm**: every client, invoice, document, filing, lead, chat and task belongs to one firm. Every query is filtered by the logged-in user's firm, so one firm never sees another's data (`npm test` checks this).
 - **Partner**: everything, plus approving invoices over ₹50,000, adding/removing users, and changing firm settings.
 - **Staff**: everything else (clients, invoices, documents, filings, leads, tasks, chat).
@@ -89,6 +109,9 @@ What changed compared with the Notion template:
 | Name | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | required | Supabase connection string (Transaction pooler) |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | empty | Email for confirmation links (see above). Required on Vercel for new sign-ups |
+| `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Google sign-in (see above) |
+| `APP_URL` | detected on Vercel, else `http://localhost:3000` | Site address used in email links and the Google redirect |
 | `PORT` | `3000` | Local port |
 | `HOST` | `127.0.0.1` | Only this computer can open it. Use `0.0.0.0` to allow the office network. |
 | `TRUST_PROXY` | off (on automatically on Vercel) | Set to `1` behind Render or Nginx, so the real visitor IP (login lockout) and HTTPS (secure cookie) are detected |

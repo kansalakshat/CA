@@ -19,7 +19,9 @@ CREATE TABLE IF NOT EXISTS users (
   firm_id INTEGER REFERENCES firms(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   email TEXT NOT NULL UNIQUE,                       -- always stored lowercase; one person, one firm
-  password_hash TEXT NOT NULL,
+  password_hash TEXT,                               -- NULL for people who only use Google sign-in
+  google_sub TEXT UNIQUE,                           -- Google account id, once linked
+  email_verified_at TEXT,                           -- NULL until the email link is clicked
   role TEXT NOT NULL DEFAULT 'staff' CHECK (role IN ('partner', 'staff')),
   created_at TEXT NOT NULL DEFAULT to_char(now() AT TIME ZONE 'Asia/Kolkata', 'YYYY-MM-DD HH24:MI:SS')
 );
@@ -27,6 +29,23 @@ CREATE TABLE IF NOT EXISTS users (
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+-- One-time links sent by email (purpose 'verify'). Only the hash is stored.
+CREATE TABLE IF NOT EXISTS email_tokens (
+  token_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  purpose TEXT NOT NULL,
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+-- Someone who signed in with Google but has no account yet; they still need to name their firm.
+CREATE TABLE IF NOT EXISTS pending_signups (
+  token_hash TEXT PRIMARY KEY,
+  email TEXT NOT NULL,
+  name TEXT NOT NULL,
+  google_sub TEXT NOT NULL,
   expires_at TIMESTAMPTZ NOT NULL
 );
 
@@ -168,6 +187,19 @@ END $$;
 
 DROP TABLE IF EXISTS settings;
 
+-- ── Upgrade: email verification + Google sign-in ──
+-- People who signed up before verification existed count as verified (only done once, when the column is added).
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns
+                 WHERE table_schema = 'public' AND table_name = 'users' AND column_name = 'email_verified_at') THEN
+    ALTER TABLE users ADD COLUMN email_verified_at TEXT;
+    UPDATE users SET email_verified_at = created_at;
+  END IF;
+END $$;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS google_sub TEXT UNIQUE;
+ALTER TABLE users ALTER COLUMN password_hash DROP NOT NULL;
+
 ALTER TABLE users ALTER COLUMN firm_id SET NOT NULL;
 ALTER TABLE clients ALTER COLUMN firm_id SET NOT NULL;
 ALTER TABLE invoices ALTER COLUMN firm_id SET NOT NULL;
@@ -197,6 +229,8 @@ DROP INDEX IF EXISTS messages_client_idx;
 ALTER TABLE firms ENABLE ROW LEVEL SECURITY;
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE sessions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE email_tokens ENABLE ROW LEVEL SECURITY;
+ALTER TABLE pending_signups ENABLE ROW LEVEL SECURITY;
 ALTER TABLE login_attempts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE clients ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;

@@ -17,6 +17,18 @@ const SESSION_DAYS = 30;
 const HIGH_VALUE = 50000;                              // invoices above this need partner approval (same rule as n8n)
 const TZ = 'Asia/Kolkata';                             // ponytail: one timezone for all firms; make it a firm setting if firms span zones
 const SIGNUPS_PER_HOUR = 10;                           // attempts per IP, to stop mass fake firms and email probing
+// Public address of the site, used in email links and the Google redirect. Never taken from the request's Host header,
+// which an attacker could fake to make verification links point at their own site.
+const APP_URL = (process.env.APP_URL
+  || (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`)
+  || `http://localhost:${PORT}`).replace(/\/$/, '');
+const GOOGLE = {
+  clientId: process.env.GOOGLE_CLIENT_ID || '',
+  clientSecret: process.env.GOOGLE_CLIENT_SECRET || '',
+  tokenUrl: process.env.GOOGLE_TOKEN_URL || 'https://oauth2.googleapis.com/token',   // overridable only so tests can fake Google
+  redirectUri: `${APP_URL}/api/auth/google/callback`,
+};
+const GOOGLE_ENABLED = Boolean(GOOGLE.clientId && GOOGLE.clientSecret);
 
 // ── Database ────────────────────────────────────────────────────────────────
 // Missing DATABASE_URL: locally, stop with a hint; on Vercel, every API call answers with the hint instead of crashing.
@@ -88,19 +100,86 @@ const sha256 = s => crypto.createHash('sha256').update(s).digest('hex');
 
 const clientIp = req => (TRUST_PROXY && String(req.headers['x-forwarded-for'] || '').split(',')[0].trim()) || req.socket?.remoteAddress || 'unknown';
 const isHttps = req => TRUST_PROXY && String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim() === 'https';
-const sessionToken = req => /(?:^|;\s*)sid=([a-f0-9]{64})/.exec(req.headers.cookie || '')?.[1];
+// Our cookies only ever hold 64-character hex tokens.
+const readCookie = (req, name) => new RegExp(`(?:^|;\\s*)${name}=([a-f0-9]{64})`).exec(req.headers.cookie || '')?.[1];
+const sessionToken = req => readCookie(req, 'sid');
+// Adds a Set-Cookie header without replacing ones set earlier in the same response.
+function setCookie(req, res, name, value, maxAgeSeconds) {
+  const cookie = `${name}=${value}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${maxAgeSeconds}${isHttps(req) ? '; Secure' : ''}`;
+  res.setHeader('set-cookie', [...[].concat(res.getHeader('set-cookie') || []), cookie]);
+}
+const randomToken = () => crypto.randomBytes(32).toString('hex');
 
 async function startSession(req, res, userId) {
-  const token = crypto.randomBytes(32).toString('hex');
+  const token = randomToken();
   await run(`INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, now() + interval '${SESSION_DAYS} days')`, sha256(token), userId);
-  res.setHeader('set-cookie', `sid=${token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=${SESSION_DAYS * 86400}${isHttps(req) ? '; Secure' : ''}`);
+  setCookie(req, res, 'sid', token, SESSION_DAYS * 86400);
 }
 
 async function sessionUser(req) {
   const token = sessionToken(req);
   if (!token) return null;
-  return (await get(`SELECT u.id, u.name, u.email, u.role, u.firm_id FROM sessions s JOIN users u ON u.id = s.user_id
+  return (await get(`SELECT u.id, u.name, u.email, u.role, u.firm_id, (u.password_hash IS NOT NULL) AS has_password
+                     FROM sessions s JOIN users u ON u.id = s.user_id
                      WHERE s.token_hash = ? AND s.expires_at > now()`, sha256(token))) || null;
+}
+
+// ── Email ───────────────────────────────────────────────────────────────────
+// Sent through any SMTP service (Gmail, Resend, Brevo, Zoho...). Without SMTP settings, local runs print the email
+// to the console instead (so links can be clicked during development); on Vercel that is an error.
+const EMAIL_READY = Boolean(process.env.SMTP_HOST) || !process.env.VERCEL;
+let mailer = null;
+async function sendEmail(to, subject, text) {
+  if (!process.env.SMTP_HOST) {
+    if (process.env.VERCEL) throw new HttpError(500, 'Email sending is not set up yet. Please try again later.');
+    console.log(`[email] to=${to} subject="${subject}"\n${text}\n[/email]`);
+    return;
+  }
+  const port = Number(process.env.SMTP_PORT) || 465;
+  mailer ||= require('nodemailer').createTransport({
+    host: process.env.SMTP_HOST, port, secure: port === 465,
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  });
+  try {
+    await mailer.sendMail({ from: process.env.EMAIL_FROM || process.env.SMTP_USER, to, subject, text });
+  } catch (e) {
+    console.error('Email failed:', e.message);
+    throw new HttpError(502, 'Could not send the email right now. Please try again in a minute.');
+  }
+}
+
+async function sendVerification(user) {
+  const token = randomToken();
+  await run(`INSERT INTO email_tokens (token_hash, user_id, purpose, expires_at) VALUES (?, ?, 'verify', now() + interval '24 hours')`, sha256(token), user.id);
+  await sendEmail(user.email, 'Confirm your email for CA Firm CRM',
+    `Hi ${user.name},\n\nPlease confirm your email address to start using CA Firm CRM:\n\n${APP_URL}/api/auth/verify?token=${token}\n\n` +
+    `This link works for 24 hours. If you did not sign up, you can ignore this email.`);
+}
+
+// ── Google sign-in (OpenID Connect, authorization code flow) ────────────────
+// The ID token comes straight from Google's token endpoint over HTTPS in exchange for our client secret,
+// so (per Google's docs) its contents can be trusted without checking the signature. We still check
+// issuer, audience, expiry and that Google verified the email.
+async function googleIdentity(code) {
+  const r = await fetch(GOOGLE.tokenUrl, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ code, client_id: GOOGLE.clientId, client_secret: GOOGLE.clientSecret, redirect_uri: GOOGLE.redirectUri, grant_type: 'authorization_code' }),
+    signal: AbortSignal.timeout(10_000),
+  });
+  const data = await r.json().catch(() => ({}));
+  if (!r.ok || !data.id_token) throw new Error(`token exchange failed (${r.status})`);
+  const claims = JSON.parse(Buffer.from(data.id_token.split('.')[1], 'base64url').toString('utf8'));
+  if (!['https://accounts.google.com', 'accounts.google.com'].includes(claims.iss)) throw new Error('wrong issuer');
+  if (claims.aud !== GOOGLE.clientId) throw new Error('wrong audience');
+  if (!(claims.exp * 1000 > Date.now())) throw new Error('expired');
+  if (!claims.email || claims.email_verified !== true) throw new Error('email not verified by Google');
+  return { sub: String(claims.sub), email: String(claims.email).toLowerCase(), name: String(claims.name || claims.email.split('@')[0]).slice(0, 200) };
+}
+
+async function pendingSignup(req) {
+  const token = readCookie(req, 'g_pending');
+  return token ? (await get('SELECT * FROM pending_signups WHERE token_hash = ? AND expires_at > now()', sha256(token))) || null : null;
 }
 
 // Rate limits kept in the database so they work across serverless instances.
@@ -113,7 +192,7 @@ const countAttempt = (key, minutes) => run(`
     until = now() + interval '${minutes} minutes'`, key);
 
 // ── Input helpers (trust boundary) ──────────────────────────────────────────
-class HttpError extends Error { constructor(status, msg) { super(msg); this.status = status; } }
+class HttpError extends Error { constructor(status, msg, code) { super(msg); this.status = status; this.code = code; } }
 const str = (v, field, { required = false, max = 200 } = {}) => {
   const s = v == null ? '' : String(v).trim();
   if (required && !s) throw new HttpError(400, `${field} is required`);
@@ -248,59 +327,164 @@ async function agentStats(firmId) {
 // Handlers get ctx = { body, params, url, user, firmId, req, res } and return JSON-able data.
 // firmId comes from the logged-in user, or (for /api/n8n/*) from the firm's API key. Never from the request body.
 // Access: PUBLIC needs nothing, PARTNER needs a partner login, /api/n8n/* needs the API key, everything else needs a login.
-const PUBLIC = new Set(['GET /api/auth/status', 'POST /api/auth/signup', 'POST /api/auth/login']);
+const PUBLIC = new Set([
+  'GET /api/auth/status', 'POST /api/auth/signup', 'POST /api/auth/login', 'POST /api/auth/resend-verification', 'GET /api/auth/verify',
+  'GET /api/auth/google/start', 'GET /api/auth/google/callback', 'POST /api/auth/google/complete', 'POST /api/auth/google/cancel',
+]);
 const PARTNER = new Set(['POST /api/invoices/:id/approve', 'POST /api/users', 'DELETE /api/users/:id', 'PATCH /api/settings', 'POST /api/settings/api-key']);
 
-const routes = {
-  'GET /api/auth/status': async ({ req }) => ({ user: await sessionUser(req) }),
+// A route returns { [REDIRECT]: '/path' } to send the browser somewhere instead of JSON.
+const REDIRECT = Symbol('redirect');
+const nowIst = () => new Date().toLocaleString('sv-SE', { timeZone: TZ });   // 'YYYY-MM-DD HH:MM:SS'
 
-  // A new CA firm signs up: creates the firm and its first partner in one statement.
-  'POST /api/auth/signup': async ({ body: b, req, res }) => {
-    const limitKey = 'signup:' + clientIp(req);
-    if (await isLimited(limitKey, SIGNUPS_PER_HOUR)) throw new HttpError(429, 'Too many sign-ups from this network. Please try again in an hour.');
+async function checkSignupLimit(req) {
+  const key = 'signup:' + clientIp(req);
+  if (await isLimited(key, SIGNUPS_PER_HOUR)) throw new HttpError(429, 'Too many sign-ups from this network. Please try again in an hour.');
+  await countAttempt(key, 60);
+}
+
+// Creates a firm and its first partner in one statement (so there is never a firm without a partner).
+async function createFirm(firmName, { name, email: e, passwordHash = null, googleSub = null, verified = false }) {
+  try {
+    return (await get(`
+      WITH f AS (INSERT INTO firms (name, api_key) VALUES (?, ?) RETURNING id)
+      INSERT INTO users (firm_id, name, email, password_hash, google_sub, email_verified_at, role)
+      SELECT f.id, ?, ?, ?, ?, ?, 'partner' FROM f RETURNING id`,
+      firmName, newApiKey(), name, e, passwordHash, googleSub, verified ? nowIst() : null)).id;
+  } catch (err) {
+    if (err.code === '23505') throw new HttpError(400, 'An account with this email already exists. Please log in.');
+    throw err;
+  }
+}
+
+const routes = {
+  'GET /api/auth/status': async ({ req }) => {
+    const pending = await pendingSignup(req);
+    return {
+      user: await sessionUser(req),
+      googleEnabled: GOOGLE_ENABLED,
+      pendingSignup: pending && { email: pending.email, name: pending.name },
+    };
+  },
+
+  // A new CA firm signs up with email + password. They must click the emailed link before logging in.
+  'POST /api/auth/signup': async ({ body: b, req }) => {
+    if (!EMAIL_READY) throw new HttpError(500, 'Email sending is not set up yet, so new sign-ups are paused. Please try again later.');
     const firmName = str(b.firmName, 'Firm name', { required: true, max: 100 });
     const name = str(b.name, 'Your name', { required: true });
     const e = email(b.email, 'Email', { required: true });
-    const hash = hashPassword(password(b.password));
-    await countAttempt(limitKey, 60);
+    const passwordHash = hashPassword(password(b.password));
+    await checkSignupLimit(req);
     if (await get('SELECT id FROM users WHERE email = ?', e)) throw new HttpError(400, 'An account with this email already exists. Please log in.');
-    let row;
-    try {
-      row = await get(`
-        WITH f AS (INSERT INTO firms (name, api_key) VALUES (?, ?) RETURNING id)
-        INSERT INTO users (firm_id, name, email, password_hash, role) SELECT f.id, ?, ?, ?, 'partner' FROM f RETURNING id`,
-        firmName, newApiKey(), name, e, hash);
-    } catch (err) {
-      if (err.code === '23505') throw new HttpError(400, 'An account with this email already exists. Please log in.');
-      throw err;
-    }
-    await startSession(req, res, row.id);
-    return { ok: true };
+    const userId = await createFirm(firmName, { name, email: e, passwordHash });
+    await sendVerification({ id: userId, name, email: e });
+    return { verify: true, email: e };
   },
 
   'POST /api/auth/login': async ({ body: b, req, res }) => {
     const ip = clientIp(req);
     if (await isLimited(ip, 10)) throw new HttpError(429, 'Too many failed attempts. Try again in 15 minutes.');
     const u = await get('SELECT * FROM users WHERE email = ?', str(b.email, 'email').toLowerCase());
+    if (u && !u.password_hash) throw new HttpError(401, 'This account signs in with Google. Use "Continue with Google".');
     if (!u || !checkPassword(String(b.password ?? ''), u.password_hash)) {
       await countAttempt(ip, 15);
       throw new HttpError(401, 'Wrong email or password');
     }
     await run('DELETE FROM login_attempts WHERE ip = ?', ip);
+    if (!u.email_verified_at) throw new HttpError(403, 'Please confirm your email first. Check your inbox for the link.', 'email_not_verified');
     await startSession(req, res, u.id);
+    return { ok: true };
+  },
+
+  // Always answers "ok", so it can't be used to find out which emails have accounts.
+  'POST /api/auth/resend-verification': async ({ body: b, req }) => {
+    const key = 'resend:' + clientIp(req);
+    if (await isLimited(key, 5)) throw new HttpError(429, 'Too many emails requested. Please try again in an hour.');
+    await countAttempt(key, 60);
+    const u = await get('SELECT id, name, email FROM users WHERE email = ? AND email_verified_at IS NULL', str(b.email, 'email').toLowerCase());
+    if (u) await sendVerification(u);
+    return { ok: true };
+  },
+
+  // The link in the verification email. Confirms the email, logs the person in, and opens the app.
+  'GET /api/auth/verify': async ({ url, req, res }) => {
+    const token = url.searchParams.get('token') || '';
+    const row = /^[a-f0-9]{64}$/.test(token) &&
+      await get(`DELETE FROM email_tokens WHERE token_hash = ? AND purpose = 'verify' AND expires_at > now() RETURNING user_id`, sha256(token));
+    if (!row) return { [REDIRECT]: '/?verify_error=1' };
+    await run('UPDATE users SET email_verified_at = coalesce(email_verified_at, ?) WHERE id = ?', nowIst(), row.user_id);
+    await run(`DELETE FROM email_tokens WHERE user_id = ? AND purpose = 'verify'`, row.user_id);
+    await startSession(req, res, row.user_id);
+    return { [REDIRECT]: '/?verified=1' };
+  },
+
+  'GET /api/auth/google/start': async ({ req, res }) => {
+    if (!GOOGLE_ENABLED) throw new HttpError(404, 'Google sign-in is not set up');
+    const state = randomToken();   // ties Google's answer to this browser (stops login CSRF)
+    setCookie(req, res, 'g_state', state, 600);
+    const params = new URLSearchParams({
+      client_id: GOOGLE.clientId, redirect_uri: GOOGLE.redirectUri, response_type: 'code',
+      scope: 'openid email profile', state, prompt: 'select_account',
+    });
+    return { [REDIRECT]: `https://accounts.google.com/o/oauth2/v2/auth?${params}` };
+  },
+
+  // Google sends the browser back here. Existing account (by Google id or email): log in.
+  // New email: remember the Google identity for 30 minutes and ask for a firm name.
+  'GET /api/auth/google/callback': async ({ url, req, res }) => {
+    if (!GOOGLE_ENABLED) throw new HttpError(404, 'Google sign-in is not set up');
+    const state = readCookie(req, 'g_state');
+    setCookie(req, res, 'g_state', '', 0);
+    if (!state || url.searchParams.get('state') !== state || !url.searchParams.get('code')) return { [REDIRECT]: '/?google_error=1' };
+    let g;
+    try { g = await googleIdentity(url.searchParams.get('code')); }
+    catch (e) { console.warn('Google sign-in failed:', e.message); return { [REDIRECT]: '/?google_error=1' }; }
+
+    const u = await get('SELECT id FROM users WHERE google_sub = ?', g.sub) || await get('SELECT id FROM users WHERE email = ?', g.email);
+    if (u) {
+      // Google confirmed this email, so it also counts as verified.
+      await run('UPDATE users SET google_sub = coalesce(google_sub, ?), email_verified_at = coalesce(email_verified_at, ?) WHERE id = ?', g.sub, nowIst(), u.id);
+      await startSession(req, res, u.id);
+      return { [REDIRECT]: '/' };
+    }
+    const token = randomToken();
+    await run(`INSERT INTO pending_signups (token_hash, email, name, google_sub, expires_at) VALUES (?, ?, ?, ?, now() + interval '30 minutes')`,
+      sha256(token), g.email, g.name, g.sub);
+    setCookie(req, res, 'g_pending', token, 1800);
+    return { [REDIRECT]: '/' };
+  },
+
+  // Second step of signing up with Google: name the firm.
+  'POST /api/auth/google/complete': async ({ body: b, req, res }) => {
+    const p = await pendingSignup(req);
+    if (!p) throw new HttpError(400, 'Your Google sign-in expired. Please click "Continue with Google" again.');
+    const firmName = str(b.firmName, 'Firm name', { required: true, max: 100 });
+    await checkSignupLimit(req);
+    const userId = await createFirm(firmName, { name: p.name, email: p.email, googleSub: p.google_sub, verified: true });
+    await run('DELETE FROM pending_signups WHERE token_hash = ?', p.token_hash);
+    setCookie(req, res, 'g_pending', '', 0);
+    await startSession(req, res, userId);
+    return { ok: true };
+  },
+
+  'POST /api/auth/google/cancel': async ({ req, res }) => {
+    const p = await pendingSignup(req);
+    if (p) await run('DELETE FROM pending_signups WHERE token_hash = ?', p.token_hash);
+    setCookie(req, res, 'g_pending', '', 0);
     return { ok: true };
   },
 
   'POST /api/auth/logout': async ({ req, res }) => {
     const token = sessionToken(req);
     if (token) await run('DELETE FROM sessions WHERE token_hash = ?', sha256(token));
-    res.setHeader('set-cookie', 'sid=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0');
+    setCookie(req, res, 'sid', '', 0);
     return { ok: true };
   },
 
+  // People who only use Google have no password yet; they can set one without "current".
   'POST /api/auth/password': async ({ body: b, user }) => {
     const u = await get('SELECT password_hash FROM users WHERE id = ?', user.id);
-    if (!checkPassword(String(b.current ?? ''), u.password_hash)) throw new HttpError(400, 'Current password is wrong');
+    if (u.password_hash && !checkPassword(String(b.current ?? ''), u.password_hash)) throw new HttpError(400, 'Current password is wrong');
     await run('UPDATE users SET password_hash = ? WHERE id = ?', hashPassword(password(b.next)), user.id);
     await run('DELETE FROM sessions WHERE user_id = ?', user.id);   // log out other devices
     return { ok: true, relogin: true };
@@ -486,7 +670,8 @@ const routes = {
     const role = oneOf(b.role || 'staff', 'role', ['partner', 'staff']);
     const hash = hashPassword(password(b.password));
     if (await get('SELECT id FROM users WHERE email = ?', e)) throw new HttpError(400, 'A user with this email already exists');
-    return { id: await insert('INSERT INTO users (firm_id, name, email, password_hash, role) VALUES (?,?,?,?,?)', firmId, name, e, hash, role) };
+    // The partner vouches for a colleague's email, so it counts as verified.
+    return { id: await insert('INSERT INTO users (firm_id, name, email, password_hash, role, email_verified_at) VALUES (?,?,?,?,?,?)', firmId, name, e, hash, role, nowIst()) };
   },
 
   'DELETE /api/users/:id': async ({ params, user, firmId }) => {
@@ -594,7 +779,9 @@ async function handler(req, res) {
 
     const params = Object.fromEntries(Object.entries(url.pathname.match(m.re).groups || {}).map(([k, v]) => [k, id(v, k)]));
     const body = ['POST', 'PATCH'].includes(req.method) ? await readJson(req) : {};
-    send(res, 200, await m.handler({ body, params, url, user, firmId, req, res }));
+    const result = await m.handler({ body, params, url, user, firmId, req, res });
+    if (result?.[REDIRECT]) { res.writeHead(302, { location: result[REDIRECT] }); return res.end(); }
+    send(res, 200, result);
   } catch (e) {
     if (!(e instanceof HttpError)) console.error(e);
     // Connection problems (wrong password, unreachable host) get a readable hint; other details stay in the server log.
@@ -602,7 +789,7 @@ async function handler(req, res) {
     const message = e instanceof HttpError ? e.message
       : dbDown ? 'Cannot connect to the database. Check DATABASE_URL (Supabase Transaction pooler string with the right password).'
       : 'Server error';
-    send(res, e.status || (dbDown ? 503 : 500), { error: message });
+    send(res, e.status || (dbDown ? 503 : 500), { error: message, ...(e instanceof HttpError && e.code ? { code: e.code } : {}) });
   }
 }
 

@@ -7,7 +7,7 @@ export async function api(method, url, body) {
     body: body && JSON.stringify(body),
   });
   const data = await r.json().catch(() => ({}));
-  if (!r.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: r.status });
+  if (!r.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: r.status, code: data.code });
   return data;
 }
 
