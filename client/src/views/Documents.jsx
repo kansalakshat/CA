@@ -1,10 +1,16 @@
 import { useState } from 'react';
+import { CheckCircle, Clock, EnvelopeSimple, FileText, WhatsappLogo, XCircle } from '@phosphor-icons/react';
 import { useApp } from '../App.jsx';
-import { avatarStyle, initials, mailLink, signature, waLink } from '../lib.js';
+import { PageHead } from '../components.jsx';
+import { initials, mailLink, signature, waLink } from '../lib.js';
 
-const FILTERS = [['all', 'All Clients'], ['missing', 'Missing Docs'], ['pending', 'Pending Verify'], ['complete', 'Complete']];
+const FILTERS = [['all', 'All clients'], ['missing', 'Missing docs'], ['pending', 'Pending verify'], ['complete', 'Complete']];
 const NEXT_STATUS = { missing: 'pending', pending: 'received', received: 'missing' };
-const STATUS_ICON = { received: '✅', missing: '❌', pending: '⏳' };
+const STATUS = {
+  received: [CheckCircle, 'Received'],
+  pending: [Clock, 'Pending verify'],
+  missing: [XCircle, 'Missing'],
+};
 
 export default function Documents() {
   const { S } = useApp();
@@ -23,20 +29,19 @@ export default function Documents() {
 
   return (
     <>
-      <div className="section-title">📄 Document Collection Hub</div>
-      <div className="section-desc">Client se required documents track karein. Document par click karke status badlein (Missing, Pending Verify, Received).</div>
+      <PageHead title="Document hub" desc="Client se required documents track karein. Document par click karke status badlein: missing, pending verify, received." />
 
-      <div className="row-between" style={{ marginBottom: 16 }}>
-        <div className="doc-filters">
+      <div className="toolbar">
+        <div className="segmented" role="group" aria-label="Filter clients">
           {FILTERS.map(([key, label]) => (
-            <div key={key} className={'filter-tab' + (filter === key ? ' active' : '')} onClick={() => setFilter(key)}>{label}</div>
+            <button key={key} aria-pressed={filter === key} onClick={() => setFilter(key)}>{label}</button>
           ))}
         </div>
-        <span className="tooltip-tag">🤖 Auto-reminders every Monday via n8n</span>
+        <span className="note-line end"><Clock size={15} aria-hidden="true" />Auto-reminders every Monday via n8n</span>
       </div>
 
       {cards.map(x => <ClientDocs key={x.c.id} {...x} />)}
-      {!cards.length && <div className="card empty">No clients match this filter.</div>}
+      {!cards.length && <div className="card empty"><FileText size={28} />No clients match this filter.</div>}
     </>
   );
 }
@@ -57,50 +62,55 @@ function ClientDocs({ c, docs, missing, pending, received }) {
   }
 
   return (
-    <div className="client-doc-card">
-      <div className="client-doc-header">
-        <div className="client-avatar" style={avatarStyle(c.id)}>{initials(c.name)}</div>
-        <div className="client-info">
-          <div className="name">{c.name}</div>
-          <div className="meta">
-            {c.services.replace(/,/g, ', ') || 'No services'} •{' '}
-            {!docs.length ? 'No documents requested yet' : outstanding.length ? `${missing + pending} outstanding • reminded ${reminders}×` : 'All docs received ✓'}
+    <section className="card doc-card" aria-label={c.name}>
+      <div className="doc-card-head">
+        <div className="avatar lg" aria-hidden="true">{initials(c.name)}</div>
+        <div className="info">
+          <h2 style={{ fontSize: 15 }}>{c.name}</h2>
+          <div className="cell-sub">
+            {c.services.replace(/,/g, ', ') || 'No services'} ·{' '}
+            {!docs.length ? 'No documents requested yet' : outstanding.length ? `${missing + pending} outstanding, reminded ${reminders}×` : 'All documents received'}
           </div>
         </div>
-        <div style={{ marginLeft: 'auto', display: 'flex', gap: 8, alignItems: 'center' }}>
-          {complete && <span className="badge badge-emerald">✓ Complete</span>}
+        <div className="end">
+          {complete && <span className="badge tone-ok"><CheckCircle size={14} weight="fill" aria-hidden="true" />Complete</span>}
           {outstanding.length > 0 && (
             <>
-              <a className="reminder-btn wa" href={waLink(c.phone, msg)} target="_blank" rel="noopener noreferrer" onClick={remind}>📱 WhatsApp Remind</a>
-              {c.email && <a className="reminder-btn email" href={mailLink(c.email, 'Documents needed', msg)} onClick={remind}>📧 Email</a>}
+              <a className="btn btn-sm wa" href={waLink(c.phone, msg)} target="_blank" rel="noopener noreferrer" onClick={remind}>
+                <WhatsappLogo size={15} weight="fill" aria-hidden="true" />WhatsApp remind
+              </a>
+              {c.email && <a className="btn btn-secondary btn-sm" href={mailLink(c.email, 'Documents needed', msg)} onClick={remind}><EnvelopeSimple size={15} aria-hidden="true" />Email</a>}
             </>
           )}
         </div>
       </div>
-      <div className="client-doc-body">
-        <div className="doc-grid">
-          {docs.map(d => (
-            <div key={d.id} className={`doc-item ${d.status}`} title="Click to change status" role="button"
-              onClick={() => act('PATCH', `/api/documents/${d.id}`, { status: NEXT_STATUS[d.status] })}>
-              <div className="doc-icon">📄</div>
-              <div className="doc-name">{d.name}</div>
-              <div className="doc-status-icon">{STATUS_ICON[d.status]}</div>
-            </div>
-          ))}
-        </div>
+      <div className="doc-card-body">
         {docs.length > 0 && (
-          <>
-            <div className="progress-bar"><div className="progress-fill" style={{ width: pct + '%' }}></div></div>
-            <div style={{ fontSize: 11, color: complete ? 'var(--emerald)' : 'var(--text-muted)', marginTop: 4 }}>
-              {received}/{docs.length} documents received ({pct}%)
-            </div>
-          </>
+          <div className="doc-grid">
+            {docs.map(d => {
+              const [Icon, label] = STATUS[d.status];
+              return (
+                <button key={d.id} className={`doc ${d.status}`} title="Click to change status"
+                  aria-label={`${d.name}: ${label}. Click to change status.`}
+                  onClick={() => act('PATCH', `/api/documents/${d.id}`, { status: NEXT_STATUS[d.status] })}>
+                  <Icon size={18} weight={d.status === 'missing' ? 'regular' : 'fill'} aria-hidden="true" />
+                  <span>{d.name}</span>
+                </button>
+              );
+            })}
+          </div>
         )}
-        <form className="doc-add" onSubmit={addDoc}>
-          <input className="form-input" placeholder="Document name, e.g. Form 16" required maxLength={80} value={newDoc} onChange={e => setNewDoc(e.target.value)} aria-label="New document name" />
-          <button className="btn btn-outline btn-sm">+ Request</button>
+        {docs.length > 0 && (
+          <div className="progress">
+            <div className="track" aria-hidden="true"><div className="fill" style={{ width: pct + '%' }} /></div>
+            <span className="num" style={complete ? { color: 'var(--ok)' } : undefined}>{received} of {docs.length} received</span>
+          </div>
+        )}
+        <form className="inline-add" onSubmit={addDoc}>
+          <input className="input sm" placeholder="Document name, e.g. Form 16…" autoComplete="off" required maxLength={80} value={newDoc} onChange={e => setNewDoc(e.target.value)} aria-label={`Request a document from ${c.name}`} />
+          <button className="btn btn-secondary btn-sm">Request</button>
         </form>
       </div>
-    </div>
+    </section>
   );
 }

@@ -1,4 +1,5 @@
 import { useApp } from '../App.jsx';
+import { PageHead } from '../components.jsx';
 import { inr, inrShort } from '../lib.js';
 
 const pct = (a, b) => (b ? Math.round(a / b * 100) : null);
@@ -27,80 +28,92 @@ export default function Reports() {
   const won = S.leads.filter(l => l.stage === 'won');
 
   const kpis = [
-    ['Compliance filed on time', pct(onTime, filed.length), `${onTime} of ${filed.length} returns`, 'var(--emerald)'],
-    ['Documents received', pct(docsReceived, S.documents.length), `${docsReceived} of ${S.documents.length} documents`, 'var(--teal)'],
-    ['Lead conversion', pct(won.length, S.leads.length), `${won.length} of ${S.leads.length} leads won (${inrShort(won.reduce((s, l) => s + l.value, 0))})`, 'var(--violet)'],
-    ['Fees collected', pct(paid.reduce((s, i) => s + i.total, 0), S.invoices.reduce((s, i) => s + i.total, 0)), avgDaysToPay == null ? 'No payments yet' : `Clients pay in ${avgDaysToPay} days on average`, 'var(--amber)'],
+    ['Compliance filed on time', pct(onTime, filed.length), `${onTime} of ${filed.length} returns`],
+    ['Documents received', pct(docsReceived, S.documents.length), `${docsReceived} of ${S.documents.length} documents`],
+    ['Lead conversion', pct(won.length, S.leads.length), `${won.length} of ${S.leads.length} leads won (${inrShort(won.reduce((s, l) => s + l.value, 0))})`],
+    ['Fees collected', pct(paid.reduce((s, i) => s + i.total, 0), S.invoices.reduce((s, i) => s + i.total, 0)), avgDaysToPay == null ? 'No payments yet' : `Clients pay in ${avgDaysToPay} days on average`],
   ];
 
   const serviceCounts = {};
   S.clients.forEach(c => c.services.split(',').filter(Boolean).forEach(s => { serviceCounts[s] = (serviceCounts[s] || 0) + 1; }));
   const services = Object.entries(serviceCounts).sort((a, b) => b[1] - a[1]);
+  const maxService = Math.max(1, ...services.map(([, n]) => n));
 
   return (
     <>
-      <div className="section-title">📈 Reports & Analytics</div>
-      <div className="section-desc">Practice performance, revenue trends, and compliance rates. Sab numbers aapke live data se.</div>
+      <PageHead title="Reports" desc="Practice performance, revenue trends aur compliance rates. Sab numbers aapke live data se." />
 
-      <div className="stats-grid">
-        {kpis.map(([label, value, sub, color]) => (
-          <div className="stat-card" key={label}>
-            <div className="stat-label">{label}</div>
-            <div className="stat-value" style={{ color }}>{value == null ? '-' : value + '%'}</div>
-            <div className="meter"><div style={{ width: (value || 0) + '%', background: color }}></div></div>
-            <div className="stat-change" style={{ color: 'var(--text-muted)' }}>{sub}</div>
+      <section className="card ledger" aria-label="Key rates">
+        {kpis.map(([label, value, sub]) => (
+          <div key={label}>
+            <div className="label">{label}</div>
+            <div className="value">{value == null ? '-' : value + '%'}</div>
+            <div className="note">{sub}</div>
           </div>
         ))}
-      </div>
+      </section>
 
       <div className="grid-2">
-        <div className="panel">
-          <div className="panel-title">💰 Billed vs Collected (last 6 months)</div>
-          <div className="bar-chart" role="img" aria-label="Monthly billed and collected amounts">
-            {months.map(m => (
-              <div className="bar-group" key={m.label}>
-                <div className="bars">
-                  <div className="bar" title={`Billed ${m.label}: ${inr(m.billed)}`} style={{ height: (m.billed / maxBar * 100) + '%', background: 'var(--teal)' }}></div>
-                  <div className="bar" title={`Collected ${m.label}: ${inr(m.collected)}`} style={{ height: (m.collected / maxBar * 100) + '%', background: 'var(--emerald)' }}></div>
-                </div>
-                <div className="bar-label">{m.label}</div>
-              </div>
-            ))}
-          </div>
-          <div className="legend"><span><i style={{ background: 'var(--teal)' }}></i>Billed</span><span><i style={{ background: 'var(--emerald)' }}></i>Collected</span></div>
-          <table style={{ marginTop: 12 }}>
-            <tbody>
+        <section className="card">
+          <div className="card-head"><h2>Billed vs collected, last 6 months</h2></div>
+          <div className="card-body">
+            <div className="bars" role="img" aria-label="Monthly billed and collected amounts. Exact figures are in the table below.">
               {months.map(m => (
-                <tr key={m.label}><td className="text-sm">{m.label}</td><td className="text-sm">{inr(m.billed)}</td><td className="text-sm" style={{ color: 'var(--emerald)' }}>{inr(m.collected)}</td></tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="panel">
-            <div className="panel-title">🧩 Clients by Service</div>
-            {services.map(([s, n]) => (
-              <div key={s} style={{ marginBottom: 10 }}>
-                <div className="row-between text-sm"><span>{s}</span><span className="font-semibold">{n}</span></div>
-                <div className="meter"><div style={{ width: pct(n, S.clients.length) + '%', background: 'var(--teal)' }}></div></div>
-              </div>
-            ))}
-            {!services.length && <div className="empty">No clients yet.</div>}
-          </div>
-
-          <div className="panel">
-            <div className="panel-title">📊 Pipeline by Stage</div>
-            {[['new', 'New'], ['qualifying', 'Qualifying'], ['proposal', 'Proposal'], ['won', 'Won']].map(([key, label]) => {
-              const list = S.leads.filter(l => l.stage === key);
-              return (
-                <div className="row-between text-sm" key={key} style={{ padding: '6px 0', borderBottom: '1px solid var(--slate-light)' }}>
-                  <span>{label} ({list.length})</span>
-                  <span className="font-semibold">{inr(list.reduce((s, l) => s + l.value, 0))}</span>
+                <div className="bar-group" key={m.label} tabIndex={0} aria-label={`${m.label}: billed ${inr(m.billed)}, collected ${inr(m.collected)}`}>
+                  <div className="bar" style={{ height: (m.billed / maxBar * 100) + '%', background: 'var(--series-1)' }} />
+                  <div className="bar" style={{ height: (m.collected / maxBar * 100) + '%', background: 'var(--series-2)' }} />
+                  <div className="bar-tip">
+                    <div className="strong" style={{ marginBottom: 4 }}>{m.label}</div>
+                    <div className="num"><i style={{ background: 'var(--series-1)' }} />Billed {inr(m.billed)}</div>
+                    <div className="num"><i style={{ background: 'var(--series-2)' }} />Collected {inr(m.collected)}</div>
+                  </div>
                 </div>
-              );
-            })}
+              ))}
+            </div>
+            <div className="bar-labels" aria-hidden="true">{months.map(m => <span key={m.label}>{m.label}</span>)}</div>
+            <div className="legend"><span><i style={{ background: 'var(--series-1)' }} />Billed</span><span><i style={{ background: 'var(--series-2)' }} />Collected</span></div>
           </div>
+          <div className="table-wrap">
+            <table>
+              <thead><tr><th>Month</th><th className="r">Billed</th><th className="r">Collected</th></tr></thead>
+              <tbody>
+                {months.map(m => (
+                  <tr key={m.label}><td>{m.label}</td><td className="r num">{inr(m.billed)}</td><td className="r num">{inr(m.collected)}</td></tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </section>
+
+        <div className="stack">
+          <section className="card">
+            <div className="card-head"><h2>Clients by service</h2></div>
+            <div className="card-body">
+              {services.map(([s, n]) => (
+                <div className="hbar" key={s}>
+                  <span>{s}</span>
+                  <div className="b" style={{ width: (n / maxService * 100) + '%' }} aria-hidden="true" />
+                  <b>{n}</b>
+                </div>
+              ))}
+              {!services.length && <div className="empty">No clients yet.</div>}
+            </div>
+          </section>
+
+          <section className="card">
+            <div className="card-head"><h2>Pipeline by stage</h2></div>
+            <div className="card-body">
+              {[['new', 'New'], ['qualifying', 'Qualifying'], ['proposal', 'Proposal'], ['won', 'Won']].map(([key, label]) => {
+                const list = S.leads.filter(l => l.stage === key);
+                return (
+                  <div className="kv" key={key}>
+                    <span>{label} <span className="muted num">({list.length})</span></span>
+                    <b>{inr(list.reduce((s, l) => s + l.value, 0))}</b>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
         </div>
       </div>
     </>

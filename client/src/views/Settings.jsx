@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useApp } from '../App.jsx';
 import { api } from '../lib.js';
+import { ConfirmButton, Field, PageHead } from '../components.jsx';
 
 export default function Settings() {
   const { S } = useApp();
@@ -8,17 +9,14 @@ export default function Settings() {
 
   return (
     <>
-      <div className="section-title">⚙️ Settings</div>
-      <div className="section-desc">
-        Firm details, n8n connection aur team users. WhatsApp API, email (Gmail) aur AI prompts n8n ke andar set hote hain.
-      </div>
+      <PageHead title="Settings" desc="Firm details, n8n connection aur team users. WhatsApp API, email (Gmail) aur AI prompts n8n ke andar set hote hain." />
 
-      <div className="grid-2" style={{ alignItems: 'start' }}>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {isPartner ? <FirmSettings /> : <div className="panel text-sm text-muted">Only partners can change firm and n8n settings.</div>}
+      <div className="grid-2">
+        <div className="stack">
+          {isPartner ? <FirmSettings /> : <div className="card card-body muted" style={{ paddingTop: 18 }}>Only partners can change firm and n8n settings.</div>}
           <ChangePassword />
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        <div className="stack">
           <Users />
         </div>
       </div>
@@ -34,31 +32,20 @@ function FirmSettings() {
   const [n8nBaseUrl, setN8nBaseUrl] = useState(S.settings.n8nBaseUrl);
 
   return (
-    <form className="panel" onSubmit={e => { e.preventDefault(); act('PATCH', '/api/settings', { firmName, phone, email, n8nBaseUrl }, 'Settings saved'); }}>
-      <div className="panel-title">🏢 Firm & n8n</div>
-      <label className="form-group" style={{ display: 'block' }}>
-        <span className="form-label">Firm name</span>
-        <input className="form-input" required maxLength={100} value={firmName} onChange={e => setFirmName(e.target.value)} />
-      </label>
-      <div className="form-row">
-        <label className="form-group" style={{ display: 'block' }}>
-          <span className="form-label">Firm phone / WhatsApp</span>
-          <input className="form-input" type="tel" maxLength={20} placeholder="+91 98765 43210" value={phone} onChange={e => setPhone(e.target.value)} />
-        </label>
-        <label className="form-group" style={{ display: 'block' }}>
-          <span className="form-label">Firm email</span>
-          <input className="form-input" type="email" maxLength={200} placeholder="office@yourfirm.in" value={email} onChange={e => setEmail(e.target.value)} />
-        </label>
+    <form className="card" onSubmit={e => { e.preventDefault(); act('PATCH', '/api/settings', { firmName, phone, email, n8nBaseUrl }, 'Settings saved'); }}>
+      <div className="card-head"><h2>Firm and n8n</h2></div>
+      <div className="card-body">
+        <Field label="Firm name"><input className="input" required maxLength={100} value={firmName} onChange={e => setFirmName(e.target.value)} /></Field>
+        <div className="form-row">
+          <Field label="Firm phone / WhatsApp"><input className="input" type="tel" maxLength={20} placeholder="+91 98765 43210" value={phone} onChange={e => setPhone(e.target.value)} /></Field>
+          <Field label="Firm email"><input className="input" type="email" maxLength={200} placeholder="office@yourfirm.in" value={email} onChange={e => setEmail(e.target.value)} spellCheck={false} /></Field>
+        </div>
+        <p className="field-hint" style={{ marginTop: -8, marginBottom: 14 }}>Shown at the end of WhatsApp and email reminders to clients.</p>
+        <Field label="n8n webhook base URL (optional)" hint="When set, new invoices go to n8n (email + WhatsApp, partner approval above ₹50,000) and the chat uses n8n's AI agent.">
+          <input className="input mono" placeholder="http://localhost:5678/webhook" value={n8nBaseUrl} onChange={e => setN8nBaseUrl(e.target.value)} spellCheck={false} />
+        </Field>
+        <button className="btn btn-primary">Save changes</button>
       </div>
-      <div className="text-xs text-muted" style={{ marginTop: -6, marginBottom: 12 }}>Shown at the end of WhatsApp and email reminders to clients.</div>
-      <label className="form-group" style={{ display: 'block' }}>
-        <span className="form-label">n8n webhook base URL (leave empty if n8n is not set up)</span>
-        <input className="form-input" placeholder="http://localhost:5678/webhook" value={n8nBaseUrl} onChange={e => setN8nBaseUrl(e.target.value)} />
-      </label>
-      <div className="text-xs text-muted" style={{ marginBottom: 12 }}>
-        When set, new invoices go to n8n (email + WhatsApp, partner approval above ₹50,000) and the chat uses n8n's AI agent.
-      </div>
-      <button className="btn btn-primary">Save</button>
     </form>
   );
 }
@@ -76,37 +63,43 @@ function Users() {
   }
 
   return (
-    <div className="panel">
-      <div className="panel-title">👥 Team Users</div>
-      <table>
-        <tbody>
-          {S.users.map(u => (
-            <tr key={u.id}>
-              <td><div style={{ fontWeight: 600 }}>{u.name}{u.id === S.me.id && ' (you)'}</div><div className="text-xs text-muted">{u.email}</div></td>
-              <td><span className={`badge badge-${u.role === 'partner' ? 'violet' : 'slate'}`}>{u.role === 'partner' ? 'Partner' : 'Staff'}</span></td>
-              <td>{isPartner && u.id !== S.me.id && (
-                <button className="btn btn-outline btn-sm" onClick={() => act('DELETE', `/api/users/${u.id}`, null, `${u.name} removed`)}>Remove</button>
-              )}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
+    <section className="card">
+      <div className="card-head"><h2>Team users</h2></div>
+      <div className="table-wrap">
+        <table>
+          <tbody>
+            {S.users.map(u => (
+              <tr key={u.id}>
+                <td><div className="cell-main">{u.name}{u.id === S.me.id && <span className="muted"> (you)</span>}</div><div className="cell-sub">{u.email}</div></td>
+                <td><span className={'badge' + (u.role === 'partner' ? ' tone-accent' : '')}>{u.role === 'partner' ? 'Partner' : 'Staff'}</span></td>
+                <td className="r">{isPartner && u.id !== S.me.id && (
+                  <ConfirmButton className="btn btn-danger btn-sm" confirmLabel={`Remove ${u.name.split(' ')[0]}`}
+                    onConfirm={() => act('DELETE', `/api/users/${u.id}`, null, `${u.name} removed`)}>Remove</ConfirmButton>
+                )}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
       {isPartner && (
-        <form onSubmit={add} style={{ marginTop: 14, borderTop: '1px solid var(--border)', paddingTop: 14 }}>
+        <form onSubmit={add} className="card-body" style={{ borderTop: '1px solid var(--line)', paddingTop: 16 }}>
+          <h3 style={{ fontSize: 14, marginBottom: 12 }}>Add a team member</h3>
           <div className="form-row">
-            <input className="form-input" placeholder="Name" required maxLength={200} value={form.name} onChange={set('name')} aria-label="Name" />
-            <input className="form-input" type="email" placeholder="Email" required value={form.email} onChange={set('email')} aria-label="Email" />
+            <Field label="Name"><input className="input" required maxLength={200} value={form.name} onChange={set('name')} autoComplete="off" /></Field>
+            <Field label="Email"><input className="input" type="email" required value={form.email} onChange={set('email')} autoComplete="off" spellCheck={false} /></Field>
           </div>
-          <div className="form-row" style={{ marginTop: 8 }}>
-            <input className="form-input" type="password" placeholder="Password (8+ characters)" required minLength={8} autoComplete="new-password" value={form.password} onChange={set('password')} aria-label="Password" />
-            <select className="form-input" value={form.role} onChange={set('role')} aria-label="Role">
-              <option value="staff">Staff</option><option value="partner">Partner (can approve invoices, manage users)</option>
-            </select>
+          <div className="form-row">
+            <Field label="Starting password" hint="8+ characters. Share it with them."><input className="input" type="password" required minLength={8} autoComplete="new-password" value={form.password} onChange={set('password')} /></Field>
+            <Field label="Role">
+              <select className="input" value={form.role} onChange={set('role')}>
+                <option value="staff">Staff</option><option value="partner">Partner (approves invoices, manages users)</option>
+              </select>
+            </Field>
           </div>
-          <button className="btn btn-primary" style={{ marginTop: 10 }}>+ Add User</button>
+          <button className="btn btn-primary">Add user</button>
         </form>
       )}
-    </div>
+    </section>
   );
 }
 
@@ -127,15 +120,17 @@ function ChangePassword() {
   }
 
   return (
-    <form className="panel" onSubmit={submit}>
-      <div className="panel-title">🔒 {hasPassword ? 'Change Your Password' : 'Set a Password'}</div>
-      {!hasPassword && <div className="text-xs text-muted" style={{ marginBottom: 10 }}>You sign in with Google. A password lets you log in with your email too.</div>}
-      <div className="form-row">
-        {hasPassword && <input className="form-input" name="current" type="password" placeholder="Current password" required autoComplete="current-password" aria-label="Current password" />}
-        <input className="form-input" name="next" type="password" placeholder="New password (8+)" required minLength={8} autoComplete="new-password" aria-label="New password" />
+    <form className="card" onSubmit={submit}>
+      <div className="card-head"><h2>{hasPassword ? 'Change your password' : 'Set a password'}</h2></div>
+      <div className="card-body">
+        {!hasPassword && <p className="field-hint" style={{ marginTop: 0, marginBottom: 12 }}>You sign in with Google. A password lets you log in with your email too.</p>}
+        <div className="form-row">
+          {hasPassword && <Field label="Current password"><input className="input" name="current" type="password" required autoComplete="current-password" /></Field>}
+          <Field label="New password" hint="At least 8 characters."><input className="input" name="next" type="password" required minLength={8} autoComplete="new-password" /></Field>
+        </div>
+        <div className="form-error" role="alert">{error}</div>
+        <button className="btn btn-secondary">{hasPassword ? 'Change password' : 'Set password'}</button>
       </div>
-      <div className="form-error">{error}</div>
-      <button className="btn btn-outline">{hasPassword ? 'Change password' : 'Set password'}</button>
     </form>
   );
 }

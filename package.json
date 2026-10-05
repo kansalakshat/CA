@@ -13,6 +13,7 @@
     "test": "node test.js"
   },
   "dependencies": {
+    "@phosphor-icons/react": "^2.1.10",
     "nodemailer": "^10.0.15",
     "pg": "^8.23.1",
     "react": "^19.3.0",

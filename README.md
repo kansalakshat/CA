@@ -48,7 +48,7 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 | `db/schema.sql` | Database tables (run once with `npm run db:setup`) |
 | `client/src/App.jsx` | App shell: sidebar, top bar, search, notifications |
 | `client/src/views/` | One file per screen (Dashboard, Invoices, Tasks, ...) |
-| `client/src/styles.css` | Styles (taken from the original HTML design) |
+| `client/src/styles.css` | Styles: colour and type tokens, light and dark theme (follows the device setting) |
 | `vercel.json` | Vercel config: builds the frontend, routes `/api` to the backend function |
 | `.env.example` | Template for `.env` (your database connection string) |
 | `n8n/n8n-workflow.json` | Your n8n workflow, connected to this CRM |

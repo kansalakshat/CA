@@ -1,133 +1,127 @@
+import { ArrowRight, CalendarCheck, UsersThree } from '@phosphor-icons/react';
 import { useApp } from '../App.jsx';
-import { fmtDate, groupFilings, inrShort, outstandingDocs, overdue, thisMonth, unfiled, unpaid, urgency, urgencyColor } from '../lib.js';
+import { Due, PageHead } from '../components.jsx';
+import { fmtDate, groupFilings, inrShort, outstandingDocs, overdue, thisMonth, unfiled, unpaid } from '../lib.js';
 
 export default function Dashboard() {
-  const { S, go } = useApp();
+  const { S, go, openModal } = useApp();
   const late = overdue(S);
   const pending = unfiled(S);
+  const urgent = pending.filter(f => f.days_left < 7).length;
+  const lateClients = new Set(late.map(i => i.client_id)).size;
   const activeLeads = S.leads.filter(l => l.stage !== 'won');
   const openTasks = S.tasks.filter(t => !t.done_at);
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
 
   const stats = [
-    ['teal', '👥', 'Total Clients', S.clients.length, `↑ ${S.clients.filter(c => thisMonth(c.created_at)).length} this month`, 'up'],
-    ['amber', '⏰', 'Pending Deadlines', pending.length, `${pending.filter(f => f.days_left < 7).length} urgent (7 days)`, 'down'],
-    ['emerald', '💰', 'Fees Collected', inrShort(S.invoices.filter(i => thisMonth(i.paid_at)).reduce((s, i) => s + i.total, 0)), 'This month', 'up'],
-    ['rose', '📬', 'Pending Fees', inrShort(unpaid(S).reduce((s, i) => s + i.total, 0)), `${new Set(late.map(i => i.client_id)).size} clients overdue`, 'down'],
+    ['Total clients', S.clients.length, `+${S.clients.filter(c => thisMonth(c.created_at)).length} this month`, ''],
+    ['Pending deadlines', pending.length, `${urgent} due within 7 days`, urgent ? 'danger' : ''],
+    ['Fees collected', inrShort(S.invoices.filter(i => thisMonth(i.paid_at)).reduce((s, i) => s + i.total, 0)), 'This month', ''],
+    ['Pending fees', inrShort(unpaid(S).reduce((s, i) => s + i.total, 0)), `${lateClients} client${lateClients === 1 ? '' : 's'} overdue`, lateClients ? 'danger' : ''],
   ];
 
   const activity = [
-    ['Chat Queries Today', S.messageCount, 'var(--teal)'],
-    ['Document Reminders Sent', S.clients.reduce((s, c) => s + Math.max(0, ...outstandingDocs(S, c.id).map(d => d.reminder_count)), 0), 'var(--amber)'],
-    ['Returns Ready (data received)', pending.filter(f => f.data_received).length, 'var(--emerald)'],
-    ['Overdue Invoices in Recovery', late.length, 'var(--rose)'],
-    ['Open Tasks', openTasks.length, 'var(--violet)'],
+    ['Chat queries today', S.messageCount],
+    ['Document reminders sent', S.clients.reduce((s, c) => s + Math.max(0, ...outstandingDocs(S, c.id).map(d => d.reminder_count)), 0)],
+    ['Returns ready (data received)', pending.filter(f => f.data_received).length],
+    ['Overdue invoices in recovery', late.length],
+    ['Open tasks', openTasks.length],
   ];
 
   return (
     <>
-      <div className="stats-grid">
-        {stats.map(([color, icon, label, value, sub, dir]) => (
-          <div className={`stat-card ${color}`} key={label}>
-            <div className="stat-icon">{icon}</div>
-            <div className="stat-label">{label}</div>
-            <div className="stat-value">{value}</div>
-            <div className={`stat-change ${dir}`}>{sub}</div>
+      <PageHead title="Aaj ka overview" desc={today} />
+
+      <section className="card ledger" aria-label="Key numbers">
+        {stats.map(([label, value, note, tone]) => (
+          <div key={label}>
+            <div className="label">{label}</div>
+            <div className="value">{value}</div>
+            <div className={'note ' + tone}>{note}</div>
           </div>
         ))}
-      </div>
+      </section>
 
       <div className="dash-grid">
-        <div className="card">
-          <div className="card-header">
-            <span>🔥</span>
-            <span className="card-title">Upcoming Compliance Deadlines</span>
-            <span className="card-action" onClick={() => go('compliance')}>View All →</span>
+        <section className="card">
+          <div className="card-head">
+            <h2>Upcoming compliance deadlines</h2>
+            <div className="end"><button className="btn btn-ghost btn-sm" onClick={() => go('compliance')}>View all <ArrowRight size={14} aria-hidden="true" /></button></div>
           </div>
           <div className="card-body">
-            {groupFilings(pending).slice(0, 5).map(g => {
+            {groupFilings(pending).slice(0, 6).map(g => {
               const f = g[0];
-              const u = urgency(f.days_left);
               return (
-                <div className="deadline-item" key={f.id}>
-                  <div className="deadline-dot" style={{ background: urgencyColor[u] }}></div>
-                  <div className="deadline-info">
-                    <div className="deadline-name">{f.return_type}: {f.period}</div>
-                    <div className="deadline-client">{g.length} client{g.length > 1 ? 's' : ''} pending</div>
+                <div className="deadline" key={f.id}>
+                  <div className="info">
+                    <div className="cell-main">{f.return_type} · {f.period}</div>
+                    <div className="cell-sub">{g.length} client{g.length > 1 ? 's' : ''} pending</div>
                   </div>
-                  <div className={`deadline-date ${{ urgent: 'urgent', warning: 'soon', ok: 'ok' }[u]}`}>{fmtDate(f.due_date, { day: '2-digit', month: 'short' })}</div>
+                  <div className="date num">{fmtDate(f.due_date, { day: '2-digit', month: 'short' })}</div>
+                  <Due days={f.days_left} />
                 </div>
               );
             })}
-            {!pending.length && <div className="empty">No pending deadlines 🎉</div>}
+            {!pending.length && <div className="empty"><CalendarCheck size={28} />No pending deadlines.</div>}
           </div>
-        </div>
+        </section>
 
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          <div className="card">
-            <div className="card-header">
-              <span>🤖</span>
-              <span className="card-title">Automation Activity</span>
-              <span className="ai-badge" style={S.settings.n8nBaseUrl ? {} : { background: 'var(--slate)' }}>{S.settings.n8nBaseUrl ? 'n8n Live' : 'n8n off'}</span>
+        <div className="stack">
+          <section className="card">
+            <div className="card-head">
+              <h2>Automation activity</h2>
+              <div className="end"><span className={'badge ' + (S.settings.n8nBaseUrl ? 'tone-ok' : '')}>{S.settings.n8nBaseUrl ? 'n8n connected' : 'n8n off'}</span></div>
             </div>
             <div className="card-body">
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {activity.map(([label, value, color]) => (
-                  <div className="row-between" key={label}>
-                    <span className="text-sm">{label}</span>
-                    <span className="font-semibold" style={{ color }}>{value}</span>
-                  </div>
-                ))}
-              </div>
+              {activity.map(([label, value]) => <div className="kv" key={label}><span>{label}</span><b>{value}</b></div>)}
             </div>
-          </div>
+          </section>
 
-          <div className="card">
-            <div className="card-header">
-              <span>📊</span>
-              <span className="card-title">Lead Pipeline</span>
-              <span className="card-action" onClick={() => go('leads')}>View →</span>
+          <section className="card">
+            <div className="card-head">
+              <h2>Lead pipeline</h2>
+              <div className="end"><button className="btn btn-ghost btn-sm" onClick={() => go('leads')}>Open <ArrowRight size={14} aria-hidden="true" /></button></div>
             </div>
-            <div className="card-body">
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div className="tile"><div className="big-num" style={{ color: 'var(--teal)' }}>{activeLeads.length}</div><div className="text-xs text-muted">Active Leads</div></div>
-                <div className="tile"><div className="big-num" style={{ color: 'var(--emerald)' }}>{inrShort(activeLeads.reduce((s, l) => s + l.value, 0))}</div><div className="text-xs text-muted">Pipeline Value</div></div>
-              </div>
+            <div className="card-body pipeline-sum">
+              <div><div className="v">{activeLeads.length}</div><div className="cell-sub">Active leads</div></div>
+              <div><div className="v">{inrShort(activeLeads.reduce((s, l) => s + l.value, 0))}</div><div className="cell-sub">Pipeline value</div></div>
             </div>
-          </div>
+          </section>
         </div>
       </div>
 
-      <div className="card" style={{ marginTop: 16 }}>
-        <div className="card-header">
-          <span>👥</span>
-          <span className="card-title">Recent Clients</span>
-          <span className="card-action" onClick={() => go('clients')}>View All Clients →</span>
+      <section className="card">
+        <div className="card-head">
+          <h2>Recent clients</h2>
+          <div className="end"><button className="btn btn-ghost btn-sm" onClick={() => go('clients')}>All clients <ArrowRight size={14} aria-hidden="true" /></button></div>
         </div>
-        <div className="card-body" style={{ padding: 0 }}>
+        <div className="table-wrap">
           <table>
-            <thead><tr><th>Client Name</th><th>Services</th><th>Added</th><th>Pending Doc</th><th>Status</th></tr></thead>
+            <thead><tr><th>Client</th><th>Services</th><th>Added</th><th>Pending documents</th><th>Status</th></tr></thead>
             <tbody>
               {S.clients.slice(0, 5).map(c => {
                 const docs = outstandingDocs(S, c.id);
-                const status = late.some(i => i.client_id === c.id) ? ['rose', '🚨 Fees Overdue'] : docs.length ? ['amber', '⚠ Doc Pending'] : ['emerald', '✓ Active'];
+                const status = late.some(i => i.client_id === c.id) ? ['danger', 'Fees overdue'] : docs.length ? ['warn', 'Docs pending'] : ['ok', 'Active'];
                 return (
                   <tr key={c.id}>
-                    <td><div style={{ fontWeight: 600 }}>{c.name}</div><div className="text-xs text-muted">{c.gstin ? `GST: ${c.gstin}` : c.pan ? `PAN: ${c.pan}` : ''}</div></td>
+                    <td><div className="cell-main">{c.name}</div><div className="cell-sub mono">{c.gstin || c.pan || ''}</div></td>
                     <td><ServiceBadges services={c.services} /></td>
-                    <td className="text-sm text-muted">{fmtDate(c.created_at)}</td>
-                    <td>{docs.length ? docs.slice(0, 2).map(d => <span key={d.id} className={`badge badge-${d.status === 'missing' ? 'rose' : 'amber'}`} style={{ marginRight: 4 }}>{d.name}</span>) : '-'}</td>
-                    <td><span className={`badge badge-${status[0]}`}>{status[1]}</span></td>
+                    <td className="muted num" style={{ whiteSpace: 'nowrap' }}>{fmtDate(c.created_at)}</td>
+                    <td>{docs.length ? <span className="small">{docs.slice(0, 2).map(d => d.name).join(', ')}{docs.length > 2 ? ` +${docs.length - 2}` : ''}</span> : <span className="muted">None</span>}</td>
+                    <td><span className={`badge tone-${status[0]}`}>{status[1]}</span></td>
                   </tr>
                 );
               })}
             </tbody>
           </table>
-          {!S.clients.length && <div className="empty">No clients yet. Click “+ New Client”.</div>}
         </div>
-      </div>
+        {!S.clients.length && (
+          <div className="empty"><UsersThree size={28} />No clients yet.<br /><button className="btn btn-primary" onClick={() => openModal('client')}>Add your first client</button></div>
+        )}
+      </section>
     </>
   );
 }
 
 export const ServiceBadges = ({ services }) =>
-  services ? services.split(',').map(s => <span key={s} className="badge badge-teal" style={{ marginRight: 4 }}>{s}</span>) : '-';
+  services ? <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: 4 }}>{services.split(',').map(s => <span key={s} className="badge">{s}</span>)}</span> : <span className="muted">None</span>;

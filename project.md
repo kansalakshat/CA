@@ -38,31 +38,31 @@ A one-page overview: total clients, pending deadlines, fees collected this month
 
 ### Clients
 Your client list with PAN/GSTIN, contact details, services (GST, ITR, TDS, ROC, Audit, Bookkeeping), pending documents, and money outstanding.
-**Add a client:** the **+ New Client** button (top right, on every screen).
+**Add a client:** the **+ New client** button (top right, on every screen).
 
 ### Invoice & Fees
-- **Create an invoice:** **+ New Invoice** → client, service, amount before GST, GST rate, days to pay. GST and the total are calculated for you, and invoice numbers (INV-2026-001, 002, ...) are assigned per firm.
+- **Create an invoice:** **+ New invoice** → client, service, amount before GST, GST rate, days to pay. GST and the total are calculated for you, and invoice numbers (INV-2026-001, 002, ...) are assigned per firm.
 - **Big invoices:** above ₹50,000 (including GST), an invoice waits for a partner to click **Approve** before it goes to the client.
-- **Reminders:** **WA** opens WhatsApp with a ready-written message, **📧** opens your email app, **📞** starts a call.
-- **Paid:** click **✓ Paid** when the money arrives.
+- **Reminders:** the green WhatsApp button opens WhatsApp with a ready-written message, the envelope opens your email app, the phone starts a call.
+- **Paid:** click **Paid** when the money arrives.
 - **Status** follows how late an invoice is: 1 to 7 days gentle reminder, 8 to 15 firm reminder, 16 to 30 final notice, 30+ escalated to partner.
 
 ### Document Hub
 For each client, the documents you need from them (Form 16, bank statement, purchase bills...).
-- **Request a document:** type its name under the client and click **+ Request**.
+- **Request a document:** type its name under the client and click **Request**.
 - **Update status:** click a document to cycle **Missing → Pending Verify → Received**.
 - **Remind the client:** WhatsApp or Email buttons. After 3 reminders, a "call the client" task is created automatically.
 - **Filters** show clients with missing documents, documents waiting for checking, or complete sets.
 
 ### Compliance
 GST, TDS, ITR and ROC returns per client, grouped by due date and coloured by urgency.
-- **Add a return:** **+ Add Filing** → client, return type, period, due date.
+- **Add a return:** **+ Add filing** → client, return type, period, due date.
 - **Fill in the figures:** tick **Data received** when the client's data arrives, then enter output tax and input tax credit. **Net payable** is calculated, or shown as ITC carried forward.
-- **Mark filed:** click **✅ Filed**. Filed returns move to "Recently Filed" (↩ undoes it).
+- **Mark filed:** click **Filed**. Filed returns move to "Recently filed" (the undo arrow reverses it).
 
 ### Lead Pipeline
 New enquiries as cards in four columns: **New Enquiry → Qualifying → Proposal Sent → Won**.
-**Add a lead:** **+ Add Lead** with name, service, source, expected value and score. Move a card with the **←** and **→** buttons.
+**Add a lead:** **+ Add lead** with name, service, source, expected value and score. Move a card with the **←** and **→** buttons.
 
 ### Tasks
 The team's to-do list: add a task, link a client, assign a person, set a due date and priority, tick it when done. Filter by open, assigned to me, done, or all.

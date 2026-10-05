@@ -1,5 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { api, overdue, outstandingDocs, unfiled, groupFilings, fmtDate, inr, todayIso } from './lib.js';
+import {
+  Bell, CalendarCheck, ChartBar, ChatsCircle, CheckSquare, FileText, Funnel, GearSix, Hourglass, List,
+  MagnifyingGlass, Plus, Receipt, SignOut, SquaresFour, UsersThree, Warning,
+} from '@phosphor-icons/react';
+import { api, overdue, outstandingDocs, unfiled, groupFilings, fmtDate, inr, initials, todayIso } from './lib.js';
 import { ClientModal, InvoiceModal, FilingModal, LeadModal } from './components.jsx';
 import Login from './views/Login.jsx';
 import FirmSetup from './views/FirmSetup.jsx';
@@ -18,23 +22,23 @@ const AppCtx = createContext(null);
 export const useApp = () => useContext(AppCtx);
 
 const VIEWS = {
-  dashboard: { component: Dashboard, icon: '📊', label: 'Dashboard', title: ['Dashboard', '· Aaj ka overview'] },
-  agent: { component: Agent, icon: '🤖', label: 'AI Support Agent', title: ['🤖 AI Support Agent', '· WhatsApp & Email automation'] },
-  documents: { component: Documents, icon: '📄', label: 'Document Hub', title: ['📄 Document Hub', '· Client documents track karein'] },
-  compliance: { component: Compliance, icon: '🔔', label: 'Compliance', title: ['🔔 Compliance Tracker', '· GST, ITR, TDS, ROC deadlines'] },
-  leads: { component: Leads, icon: '📊', label: 'Lead Pipeline', title: ['📊 Lead Pipeline', '· Lead qualification'] },
-  invoices: { component: Invoices, icon: '🧾', label: 'Invoice & Fees', title: ['🧾 Invoice & Fees', '· Outstanding collections'] },
-  clients: { component: Clients, icon: '👥', label: 'Clients', title: ['👥 Client Management', '· All clients'] },
-  tasks: { component: Tasks, icon: '✅', label: 'Tasks', title: ['✅ Tasks', '· Team assignments'] },
-  reports: { component: Reports, icon: '📈', label: 'Reports', title: ['📈 Reports', '· Analytics'] },
-  settings: { component: Settings, icon: '⚙️', label: 'Settings', title: ['⚙️ Settings', '· Configuration'] },
+  dashboard: { component: Dashboard, icon: SquaresFour, label: 'Dashboard' },
+  agent: { component: Agent, icon: ChatsCircle, label: 'AI support agent' },
+  documents: { component: Documents, icon: FileText, label: 'Document hub' },
+  compliance: { component: Compliance, icon: CalendarCheck, label: 'Compliance' },
+  leads: { component: Leads, icon: Funnel, label: 'Lead pipeline' },
+  invoices: { component: Invoices, icon: Receipt, label: 'Invoices & fees' },
+  clients: { component: Clients, icon: UsersThree, label: 'Clients' },
+  tasks: { component: Tasks, icon: CheckSquare, label: 'Tasks' },
+  reports: { component: Reports, icon: ChartBar, label: 'Reports' },
+  settings: { component: Settings, icon: GearSix, label: 'Settings' },
 };
 
 const NAV = [
-  ['Overview', ['dashboard']],
-  ['AI Modules', ['agent', 'documents', 'compliance', 'leads', 'invoices']],
-  ['Management', ['clients', 'tasks', 'reports']],
-  ['Settings', ['settings']],
+  ['', ['dashboard']],
+  ['Daily work', ['agent', 'documents', 'compliance', 'leads', 'invoices']],
+  ['Practice', ['clients', 'tasks', 'reports']],
+  ['Firm', ['settings']],
 ];
 
 const MODALS = { client: ClientModal, invoice: InvoiceModal, filing: FilingModal, lead: LeadModal };
@@ -53,8 +57,9 @@ export default function App() {
   const [S, setS] = useState(null);            // everything from /api/state
   const [view, setView] = useState('dashboard');
   const [modal, setModal] = useState(null);
+  const [navOpen, setNavOpen] = useState(false);   // sidebar drawer on small screens
   // The server redirects back with ?verified=1, ?verify_error=1 or ?google_error=1. Read once, then clean the address bar.
-  const [toastMsg, setToastMsg] = useState(() => (new URLSearchParams(window.location.search).has('verified') ? 'Email confirmed. Welcome!' : ''));
+  const [toastMsg, setToastMsg] = useState(() => (new URLSearchParams(window.location.search).has('verified') ? 'Email confirmed. Welcome.' : ''));
   const [loginNotice] = useState(() => {
     const p = new URLSearchParams(window.location.search);
     if (window.location.search) window.history.replaceState(null, '', window.location.pathname);
@@ -74,14 +79,25 @@ export default function App() {
 
   const handleError = useCallback(e => {
     if (e.status === 401) { setS(null); checkAuth(); }
-    else setToastMsg('⚠️ ' + e.message);
+    else setToastMsg(e.message);
   }, [checkAuth]);
 
+  // Returns false if loading failed (the error is already shown or handled).
   const reload = useCallback(async () => {
-    try { setS(await api('GET', '/api/state')); } catch (e) { handleError(e); }
+    try { setS(await api('GET', '/api/state')); return true; } catch (e) { handleError(e); return false; }
   }, [handleError]);
 
   useEffect(() => { if (auth?.user) reload(); }, [auth?.user?.id, reload]);
+
+  useEffect(() => {
+    if (!navOpen) return;
+    const onKey = e => e.key === 'Escape' && setNavOpen(false);
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, [navOpen]);
+
+  const firmName = S?.settings.firmName;
+  useEffect(() => { if (firmName) document.title = `${VIEWS[view].label} · ${firmName}`; }, [view, firmName]);
 
   // Run a change on the server, then reload everything. Returns the server reply, or null on error.
   const act = useCallback(async (method, url, body, okMsg) => {
@@ -95,11 +111,12 @@ export default function App() {
 
   if (!auth) return null;
   if (!auth.user) return <Login googleEnabled={auth.googleEnabled} pendingSignup={auth.pendingSignup} notice={loginNotice} onDone={checkAuth} />;
-  if (!S) return <div className="login-wrap" style={{ color: 'white' }}>Loading…</div>;
+  if (!S) return <ShellSkeleton />;
   // A new firm's partner fills in contact details once (or skips).
   if (S.me.role === 'partner' && !S.settings.setupDone) return <FirmSetup S={S} onDone={reload} />;
 
-  const ctx = { S, reload, act, toast: setToastMsg, openModal: setModal, go: setView, logout: () => api('POST', '/api/auth/logout').then(checkAuth) };
+  const go = id => { setView(id); setNavOpen(false); window.scrollTo(0, 0); };
+  const ctx = { S, reload, act, toast: setToastMsg, openModal: setModal, go, logout: () => api('POST', '/api/auth/logout').then(checkAuth) };
   const View = VIEWS[view].component;
   const Modal = modal && MODALS[modal];
 
@@ -110,67 +127,96 @@ export default function App() {
     leads: S.leads.filter(l => l.stage !== 'won').length,
     invoices: overdue(S).length,
   };
-  const badgeClass = { documents: 'amber', leads: 'teal' };
+  const alertBadge = { compliance: true, invoices: true };   // counts of things already late or due this week
 
   return (
     <AppCtx.Provider value={ctx}>
-      <aside className="sidebar">
-        <div className="sidebar-brand">
-          <div className="brand-logo">
-            <div className="brand-icon">CA</div>
-            <div className="brand-text">
+      <a href="#main" className="skip-link">Skip to content</a>
+      <div className="app">
+        <nav className={'sidebar' + (navOpen ? ' open' : '')} aria-label="Main">
+          <div className="brand">
+            <div className="brand-mark" aria-hidden="true">CA</div>
+            <div>
               <div className="brand-name">{S.settings.firmName}</div>
-              <div className="brand-sub">CHARTERED ACCOUNTANTS</div>
+              <div className="brand-sub">Chartered Accountants</div>
             </div>
           </div>
-        </div>
 
-        {NAV.map(([section, ids]) => (
-          <div className="sidebar-section" key={section}>
-            <div className="sidebar-section-label">{section}</div>
-            {ids.map(id => (
-              <div key={id} className={'nav-item' + (view === id ? ' active' : '')} onClick={() => setView(id)}>
-                <span className="nav-icon">{VIEWS[id].icon}</span> {VIEWS[id].label}
-                {badges[id] > 0 && <span className={'nav-badge ' + (badgeClass[id] || '')}>{badges[id]}</span>}
-              </div>
-            ))}
-          </div>
-        ))}
-
-        <div className="sidebar-footer">
-          <div className="user-card">
-            <div className="user-avatar">{S.me.name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase()}</div>
-            <div className="user-info">
-              <div className="user-name">{S.me.name}</div>
-              <div className="user-role">{S.me.role === 'partner' ? 'Partner, Admin' : 'Staff'}</div>
+          {NAV.map(([section, ids]) => (
+            <div className="nav-group" key={section || 'top'}>
+              {section && <div className="nav-label">{section}</div>}
+              {ids.map(id => {
+                const Icon = VIEWS[id].icon;
+                return (
+                  <button key={id} className="nav-item" aria-current={view === id ? 'page' : undefined} onClick={() => go(id)}>
+                    <Icon size={18} weight={view === id ? 'fill' : 'regular'} aria-hidden="true" />
+                    {VIEWS[id].label}
+                    {badges[id] > 0 && <span className={'nav-count' + (alertBadge[id] ? ' alert' : '')}>{badges[id]}</span>}
+                  </button>
+                );
+              })}
             </div>
-            <button title="Log out" aria-label="Log out" onClick={ctx.logout}
-              style={{ background: 'none', border: '1px solid rgba(255,255,255,0.2)', borderRadius: 6, color: 'rgba(255,255,255,0.6)', cursor: 'pointer', fontSize: 11, padding: '3px 7px' }}>Logout</button>
-          </div>
-        </div>
-      </aside>
+          ))}
 
-      <div className="main">
-        <div className="topbar">
-          <div>
-            <span className="topbar-title">{VIEWS[view].title[0]}</span>
-            <span className="topbar-subtitle">{VIEWS[view].title[1]}</span>
+          <div className="sidebar-foot">
+            <div className="avatar" aria-hidden="true">{initials(S.me.name)}</div>
+            <div className="who">
+              <div className="who-name">{S.me.name}</div>
+              <div className="who-role">{S.me.role === 'partner' ? 'Partner, admin' : 'Staff'}</div>
+            </div>
+            <button className="icon-btn bare" title="Log out" aria-label="Log out" onClick={ctx.logout}><SignOut size={18} /></button>
           </div>
-          <div className="topbar-actions">
+        </nav>
+        {navOpen && <div className="sidebar-scrim" onClick={() => setNavOpen(false)} aria-hidden="true" />}
+
+        <div className="main">
+          <header className="topbar">
+            <button className="icon-btn menu-btn" aria-label="Open menu" aria-expanded={navOpen} onClick={() => setNavOpen(true)}><List size={20} /></button>
             <Search />
-            <button className="btn btn-primary" onClick={() => setModal('client')}>+ New Client</button>
-            <Notifications />
-          </div>
-        </div>
+            <div className="topbar-actions">
+              <button className="btn btn-primary" onClick={() => setModal('client')} aria-label="New client">
+                <Plus size={16} weight="bold" aria-hidden="true" /><span className="new-label">New client</span>
+              </button>
+              <Notifications />
+            </div>
+          </header>
 
-        <div className="content">
-          <View />
+          <main className="content" id="main" tabIndex={-1}>
+            <View />
+          </main>
         </div>
       </div>
 
       {Modal && <Modal onClose={() => setModal(null)} />}
       {toastMsg && <div className="toast" role="status">{toastMsg}</div>}
     </AppCtx.Provider>
+  );
+}
+
+// Placeholder shaped like the app while /api/state loads.
+function ShellSkeleton() {
+  return (
+    <div className="app" aria-busy="true" aria-label="Loading">
+      <div className="sidebar">{[150, 110, 120, 100, 130, 90, 120].map((w, i) => <div key={i} className="skel" style={{ height: 14, width: w, margin: '12px 10px' }} />)}</div>
+      <div className="main">
+        <div className="topbar"><div className="skel" style={{ height: 36, width: 300, maxWidth: '100%' }} /></div>
+        <div className="content">
+          <div className="skel" style={{ height: 28, width: 220, marginBottom: 24 }} />
+          <div className="skel" style={{ height: 104, marginBottom: 20 }} />
+          <div className="skel" style={{ height: 300 }} />
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function PopItem({ item, onPick }) {
+  const Icon = item.icon;
+  return (
+    <button className="pop-item" onClick={onPick}>
+      <Icon size={16} aria-hidden="true" style={item.tone ? { color: `var(--${item.tone})` } : undefined} />
+      <span><span className="t">{item.title}</span><span className="s" style={{ display: 'block' }}>{item.sub}</span></span>
+    </button>
   );
 }
 
@@ -183,25 +229,23 @@ function Search() {
   const needle = q.trim().toLowerCase();
   const has = (...fields) => fields.some(f => f && String(f).toLowerCase().includes(needle));
   const results = needle.length < 2 ? [] : [
-    ...S.clients.filter(c => has(c.name, c.pan, c.gstin, c.phone, c.email)).map(c => ({ key: 'c' + c.id, view: 'clients', title: `👥 ${c.name}`, sub: c.gstin || c.pan || c.phone })),
-    ...S.invoices.filter(i => has(i.number, i.client_name)).map(i => ({ key: 'i' + i.id, view: 'invoices', title: `🧾 ${i.number}`, sub: `${i.client_name} • ${inr(i.total)}` })),
-    ...S.tasks.filter(t => has(t.title)).map(t => ({ key: 't' + t.id, view: 'tasks', title: `✅ ${t.title}`, sub: t.done_at ? 'Done' : 'Open' })),
-    ...S.leads.filter(l => has(l.name, l.service)).map(l => ({ key: 'l' + l.id, view: 'leads', title: `📊 ${l.name}`, sub: l.service })),
+    ...S.clients.filter(c => has(c.name, c.pan, c.gstin, c.phone, c.email)).map(c => ({ key: 'c' + c.id, view: 'clients', icon: UsersThree, title: c.name, sub: c.gstin || c.pan || c.phone })),
+    ...S.invoices.filter(i => has(i.number, i.client_name)).map(i => ({ key: 'i' + i.id, view: 'invoices', icon: Receipt, title: i.number, sub: `${i.client_name} · ${inr(i.total)}` })),
+    ...S.tasks.filter(t => has(t.title)).map(t => ({ key: 't' + t.id, view: 'tasks', icon: CheckSquare, title: t.title, sub: t.done_at ? 'Done' : 'Open' })),
+    ...S.leads.filter(l => has(l.name, l.service)).map(l => ({ key: 'l' + l.id, view: 'leads', icon: Funnel, title: l.name, sub: l.service })),
   ].slice(0, 12);
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <div className="search-box">
-        <span>🔍</span>
-        <input type="text" placeholder="Client, invoice, task search karein…" value={q} onChange={e => setQ(e.target.value)} aria-label="Search" />
-      </div>
+    <div ref={ref} className="search">
+      <label className="search-field">
+        <MagnifyingGlass size={16} aria-hidden="true" />
+        <input type="search" placeholder="Client, invoice, task search karein…" autoComplete="off" value={q} onChange={e => setQ(e.target.value)}
+          onKeyDown={e => e.key === 'Escape' && setQ('')} aria-label="Search clients, invoices, tasks and leads" />
+      </label>
       {needle.length >= 2 && (
-        <div className="dropdown" style={{ left: 0, right: 'auto' }}>
-          {results.length ? results.map(r => (
-            <div key={r.key} className="dropdown-item" onClick={() => { go(r.view); setQ(''); }}>
-              {r.title}<div className="sub">{r.sub}</div>
-            </div>
-          )) : <div className="empty">No matches</div>}
+        <div className="popover">
+          {results.length ? results.map(r => <PopItem key={r.key} item={r} onPick={() => { go(r.view); setQ(''); }} />)
+            : <div className="empty">No matches for "{q.trim()}"</div>}
         </div>
       )}
     </div>
@@ -215,25 +259,24 @@ function Notifications() {
   useClickOutside(ref, useCallback(() => setOpen(false), []));
 
   const items = [
-    ...(S.me.role === 'partner' ? S.invoices.filter(i => i.approval === 'pending').map(i => ({ key: 'a' + i.id, view: 'invoices', title: `⏳ Approve ${i.number}`, sub: `${i.client_name} • ${inr(i.total)}` })) : []),
-    ...overdue(S).filter(i => i.days_overdue > 30).map(i => ({ key: 'o' + i.id, view: 'invoices', title: `🚨 ${i.client_name}: ${i.days_overdue} days overdue`, sub: `${i.number} • ${inr(i.total)}` })),
-    ...groupFilings(unfiled(S).filter(f => f.days_left < 7)).map(g => ({ key: 'f' + g[0].id, view: 'compliance', title: `📋 ${g[0].return_type} due ${fmtDate(g[0].due_date)}`, sub: `${g.length} client(s) pending` })),
+    ...(S.me.role === 'partner' ? S.invoices.filter(i => i.approval === 'pending').map(i => ({ key: 'a' + i.id, view: 'invoices', icon: Hourglass, tone: 'accent', title: `Approve ${i.number}`, sub: `${i.client_name} · ${inr(i.total)}` })) : []),
+    ...overdue(S).filter(i => i.days_overdue > 30).map(i => ({ key: 'o' + i.id, view: 'invoices', icon: Warning, tone: 'danger', title: `${i.client_name}: ${i.days_overdue} days overdue`, sub: `${i.number} · ${inr(i.total)}` })),
+    ...groupFilings(unfiled(S).filter(f => f.days_left < 7)).map(g => ({ key: 'f' + g[0].id, view: 'compliance', icon: CalendarCheck, tone: 'warn', title: `${g[0].return_type} due ${fmtDate(g[0].due_date)}`, sub: `${g.length} client(s) pending` })),
     ...S.tasks.filter(t => !t.done_at && (t.assignee_id === S.me.id || !t.assignee_id) && t.due_date && t.due_date <= todayIso())
-      .map(t => ({ key: 't' + t.id, view: 'tasks', title: `✅ ${t.title}`, sub: `Due ${fmtDate(t.due_date)}${t.assignee_name ? '' : ' • unassigned'}` })),
+      .map(t => ({ key: 't' + t.id, view: 'tasks', icon: CheckSquare, title: t.title, sub: `Due ${fmtDate(t.due_date)}${t.assignee_name ? '' : ' · unassigned'}` })),
   ];
 
   return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <div className="notif-btn" onClick={() => setOpen(o => !o)} role="button" aria-label="Notifications">
-        🔔{items.length > 0 && <div className="notif-dot"></div>}
-      </div>
+    <div ref={ref} className="bell">
+      <button className="icon-btn" onClick={() => setOpen(o => !o)} aria-expanded={open}
+        aria-label={items.length ? `Notifications, ${items.length} need attention` : 'Notifications'}>
+        <Bell size={18} />
+      </button>
+      {items.length > 0 && <span className="bell-count" aria-hidden="true">{items.length}</span>}
       {open && (
-        <div className="dropdown">
-          {items.length ? items.map(n => (
-            <div key={n.key} className="dropdown-item" onClick={() => { go(n.view); setOpen(false); }}>
-              {n.title}<div className="sub">{n.sub}</div>
-            </div>
-          )) : <div className="empty">All clear 🎉</div>}
+        <div className="popover">
+          {items.length ? items.map(n => <PopItem key={n.key} item={n} onPick={() => { go(n.view); setOpen(false); }} />)
+            : <div className="empty">Nothing needs attention right now.</div>}
         </div>
       )}
     </div>

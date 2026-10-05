@@ -5,6 +5,9 @@ export async function api(method, url, body) {
     method,
     headers: body ? { 'content-type': 'application/json' } : {},
     body: body && JSON.stringify(body),
+    signal: AbortSignal.timeout(40_000),   // longer than the server's slowest call (n8n, 25s), so only a stuck request trips it
+  }).catch(e => {
+    throw new Error(e.name === 'TimeoutError' ? 'The server took too long to answer. Check your connection and try again.' : 'Could not reach the server. Check your connection and try again.');
   });
   const data = await r.json().catch(() => ({}));
   if (!r.ok) throw Object.assign(new Error(data.error || 'Request failed'), { status: r.status, code: data.code });
@@ -21,8 +24,6 @@ export const lastMonthLabel = () =>
   new Date(new Date().getFullYear(), new Date().getMonth() - 1, 1).toLocaleDateString('en-GB', { month: 'short', year: 'numeric' });
 
 export const initials = name => name.split(/\s+/).filter(w => /^[A-Za-z]/.test(w)).slice(0, 2).map(w => w[0].toUpperCase()).join('');
-const AVATAR_COLORS = ['#0EA5C9,#0369A1', '#8B5CF6,#6D28D9', '#10B981,#059669', '#F59E0B,#D97706', '#F43F5E,#BE123C'];
-export const avatarStyle = id => ({ background: `linear-gradient(135deg,${AVATAR_COLORS[id % AVATAR_COLORS.length]})` });
 
 const waNumber = p => { const d = String(p).replace(/\D/g, ''); return d.length === 10 ? '91' + d : d; };
 export const waLink = (phone, text) => `https://wa.me/${waNumber(phone)}?text=${encodeURIComponent(text)}`;
@@ -47,17 +48,21 @@ export function groupFilings(list) {
   return Object.values(groups);
 }
 
-// Matches the n8n recovery stages: 1-7 gentle, 8-15 firm, 16-30 final, 30+ partner.
+// Matches the n8n recovery stages: 1-7 gentle, 8-15 firm, 16-30 final, 30+ partner. Returns [label, tone].
 export function invoiceStage(i) {
-  if (i.paid_at) return ['✓ Paid', 'emerald'];
-  if (i.approval === 'pending') return ['⏳ Awaiting Partner Approval', 'violet'];
+  if (i.paid_at) return ['Paid', 'ok'];
+  if (i.approval === 'pending') return ['Awaiting partner approval', 'accent'];
   const d = i.days_overdue;
-  if (d <= 0) return d >= -7 ? ['⚠️ Due Soon', 'amber'] : ['Not Due', 'teal'];
-  if (d <= 7) return ['Gentle Reminder', 'amber'];
-  if (d <= 15) return ['Firm Reminder', 'rose'];
-  if (d <= 30) return ['🚨 Final Notice', 'rose'];
-  return ['🚨 Escalated to Partner', 'rose'];
+  if (d <= 0) return d >= -7 ? ['Due soon', 'warn'] : ['Not due', ''];
+  if (d <= 7) return ['Gentle reminder', 'warn'];
+  if (d <= 15) return ['Firm reminder', 'danger'];
+  if (d <= 30) return ['Final notice', 'danger'];
+  return ['Escalated to partner', 'danger'];
 }
 
-export const urgency = daysLeft => (daysLeft < 7 ? 'urgent' : daysLeft <= 30 ? 'warning' : 'ok');
-export const urgencyColor = { urgent: 'var(--rose)', warning: 'var(--amber)', ok: 'var(--emerald)' };
+// Countdown chip for anything with a due date: [label, tone]. Under 7 days is urgent, up to 30 is coming up.
+export const dueChip = daysLeft => [
+  daysLeft < 0 ? `${-daysLeft}d late` : daysLeft === 0 ? 'today' : `${daysLeft}d left`,
+  daysLeft < 7 ? 'danger' : daysLeft <= 30 ? 'warn' : '',
+];
+export const daysFromToday = iso => Math.round((new Date(iso.slice(0, 10)) - new Date(todayIso())) / 86400000);
