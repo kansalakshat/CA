@@ -138,10 +138,10 @@ async function sendEmail(to, subject, text) {
   const port = Number(process.env.SMTP_PORT) || 465;
   mailer ||= require('nodemailer').createTransport({
     host: process.env.SMTP_HOST, port, secure: port === 465,
-    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+    auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASSWORD },
   });
   try {
-    await mailer.sendMail({ from: process.env.EMAIL_FROM || process.env.SMTP_USER, to, subject, text });
+    await mailer.sendMail({ from: process.env.SMTP_FROM || process.env.SMTP_USER, to, subject, text });
   } catch (e) {
     console.error('Email failed:', e.message);
     throw new HttpError(502, 'Could not send the email right now. Please try again in a minute.');

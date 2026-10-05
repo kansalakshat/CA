@@ -36,7 +36,7 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 
 1. Push the project to GitHub (`.env` is ignored, so your password is not uploaded).
 2. In Vercel: **Add New → Project** → import the repo. The settings come from `vercel.json`, so leave them as they are.
-3. Under **Environment Variables**, add `DATABASE_URL` (the same Transaction pooler string as in `.env`), the `SMTP_*` / `EMAIL_FROM` email settings, and optionally `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Without email settings, new sign-ups are paused on Vercel (existing users can still log in).
+3. Under **Environment Variables**, add `DATABASE_URL` (the same Transaction pooler string as in `.env`), the `SMTP_*` email settings, and optionally `GOOGLE_CLIENT_ID` / `GOOGLE_CLIENT_SECRET`. Without email settings, new sign-ups are paused on Vercel (existing users can still log in).
 4. Click **Deploy**. Open the site and sign up your firm (or log in).
 
 ## Files
@@ -58,7 +58,7 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 
 New firms that sign up with email + password get a confirmation link and must click it before they can log in.
 
-- **Gmail (simplest):** turn on 2-Step Verification for the Google account, then create an **App password** (Google Account → Security → App passwords). Set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=465`, `SMTP_USER` = the Gmail address, `SMTP_PASS` = the 16-character app password. Gmail allows about 500 emails a day.
+- **Gmail (simplest):** turn on 2-Step Verification for the Google account, then create an **App password** (Google Account → Security → App passwords). Set `SMTP_HOST=smtp.gmail.com`, `SMTP_PORT=587`, `SMTP_USER` = the Gmail address, `SMTP_PASSWORD` = the 16-character app password, `SMTP_FROM` = the same Gmail address. Gmail allows about 500 emails a day.
 - **Any other SMTP service** (Resend, Brevo, Zoho, your domain's mail) works the same way with its host, port, user and password.
 - **Locally without SMTP**, emails are printed in the terminal running `npm start`, so you can click the link there.
 
@@ -109,7 +109,7 @@ What changed compared with the Notion template:
 | Name | Default | Purpose |
 |---|---|---|
 | `DATABASE_URL` | required | Supabase connection string (Transaction pooler) |
-| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASS`, `EMAIL_FROM` | empty | Email for confirmation links (see above). Required on Vercel for new sign-ups |
+| `SMTP_HOST`, `SMTP_PORT`, `SMTP_USER`, `SMTP_PASSWORD`, `SMTP_FROM` | empty | Email for confirmation links (see above). Required on Vercel for new sign-ups |
 | `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET` | empty | Google sign-in (see above) |
 | `APP_URL` | detected on Vercel, else `http://localhost:3000` | Site address used in email links and the Google redirect |
 | `PORT` | `3000` | Local port |
