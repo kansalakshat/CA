@@ -48,13 +48,13 @@ function useClickOutside(ref, onOutside) {
 }
 
 export default function App() {
-  const [auth, setAuth] = useState(null);      // { needsSetup, user }
+  const [auth, setAuth] = useState(null);      // { user }
   const [S, setS] = useState(null);            // everything from /api/state
   const [view, setView] = useState('dashboard');
   const [modal, setModal] = useState(null);
   const [toastMsg, setToastMsg] = useState('');
 
-  const checkAuth = useCallback(() => api('GET', '/api/auth/status').then(setAuth).catch(() => setAuth({ needsSetup: false, user: null })), []);
+  const checkAuth = useCallback(() => api('GET', '/api/auth/status').then(setAuth).catch(() => setAuth({ user: null })), []);
   useEffect(() => { checkAuth(); }, [checkAuth]);
 
   useEffect(() => {
@@ -64,7 +64,7 @@ export default function App() {
   }, [toastMsg]);
 
   const handleError = useCallback(e => {
-    if (e.status === 401) { setS(null); setAuth(a => ({ ...a, user: null })); }
+    if (e.status === 401) { setS(null); setAuth({ user: null }); }
     else setToastMsg('⚠️ ' + e.message);
   }, []);
 
@@ -85,7 +85,7 @@ export default function App() {
   }, [reload, handleError]);
 
   if (!auth) return null;
-  if (!auth.user) return <Login needsSetup={auth.needsSetup} onDone={checkAuth} />;
+  if (!auth.user) return <Login onDone={checkAuth} />;
   if (!S) return <div className="login-wrap" style={{ color: 'white' }}>Loading…</div>;
 
   const ctx = { S, reload, act, toast: setToastMsg, openModal: setModal, go: setView, logout: () => api('POST', '/api/auth/logout').then(checkAuth) };

@@ -1,5 +1,6 @@
 # CA Firm CRM
 
+Multi-firm CRM for CA firms: each firm signs up, gets a private workspace, and adds its own team.
 React frontend + small Node.js backend + Supabase (Postgres) database.
 
 ## First-time setup
@@ -16,9 +17,9 @@ Needs Node.js 22.13 or newer (`node -v` to check).
    npm run build
    npm start
    ```
-5. Open http://localhost:3000. The first visit asks you to create the **partner (admin) account**. Add staff later in **Settings**.
+5. Open http://localhost:3000 and click **Sign up your firm**. You become that firm's partner (admin). Add your team in **Settings**.
 
-`npm run db:setup` creates the tables (safe to run again). Instead of running it, you can paste `db/schema.sql` into Supabase → **SQL Editor** → **Run**.
+`npm run db:setup` creates the tables, or upgrades an older single-firm database in place (safe to run again). Instead of running it, you can paste `db/schema.sql` into Supabase → **SQL Editor** → **Run**.
 
 ## Everyday commands
 
@@ -36,7 +37,7 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 1. Push the project to GitHub (`.env` is ignored, so your password is not uploaded).
 2. In Vercel: **Add New → Project** → import the repo. The settings come from `vercel.json`, so leave them as they are.
 3. Under **Environment Variables**, add `DATABASE_URL` (the same Transaction pooler string as in `.env`).
-4. Click **Deploy**. Open the site and create the partner account.
+4. Click **Deploy**. Open the site and sign up your firm (or log in).
 
 ## Files
 
@@ -53,10 +54,14 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 | `n8n/n8n-workflow.json` | Your n8n workflow, connected to this CRM |
 | `n8n/template.json` | Original n8n template from Notion (input for `n8n/make-workflow.js`) |
 
-## Who can do what
+## Firms and users
 
-- **Partner**: everything, plus approving invoices over ₹50,000, adding/removing users, and changing settings.
+- **New CA firm**: clicks **Sign up your firm** on the login page. That creates the firm and makes the person its partner.
+- **Joining an existing firm**: the firm's partner adds them in **Settings → Team Users**. People cannot join a firm on their own.
+- **Data is per firm**: every client, invoice, document, filing, lead, chat and task belongs to one firm. Every query is filtered by the logged-in user's firm, so one firm never sees another's data (`npm test` checks this).
+- **Partner**: everything, plus approving invoices over ₹50,000, adding/removing users, and changing firm settings.
 - **Staff**: everything else (clients, invoices, documents, filings, leads, tasks, chat).
+- Sign-ups are limited to 10 attempts per hour per network, to stop spam firms.
 
 ## Security notes
 
@@ -67,7 +72,7 @@ Everything runs on Vercel: the React app as static files, the backend as a serve
 ## Connecting n8n
 
 1. In n8n: **Import from file** → `n8n/n8n-workflow.json`.
-2. In the CRM: **Settings** → copy the API key. In n8n, replace every `YOUR_CRM_API_KEY` with it (5 nodes whose names start with "CRM:").
+2. In the CRM: **Settings** → copy your firm's API key. In n8n, replace every `YOUR_CRM_API_KEY` with it (5 nodes whose names start with "CRM:"). The key tells the CRM which firm n8n is working for, so each firm uses its own copy of the workflow with its own key.
 3. The workflow points at `http://localhost:3000`. If the CRM is on Vercel, regenerate it with your site address:
    `node n8n/make-workflow.js https://your-crm.vercel.app`
 4. In the CRM: **Settings** → set the n8n webhook URL (e.g. `https://your-n8n.example.com/webhook`).
