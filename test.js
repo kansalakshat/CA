@@ -14,7 +14,11 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const FIXTURE_KEY = 'fixture-firm-api-key-0000000000000000';   // the other firm already in the database
 const GOOGLE_PORT = 5599;
 let googleUser = null;   // what the fake Google token endpoint says about the person signing in
-let serverLog = '';      // server output; local runs print emails here instead of sending them
+let serverLog = '';
+let db;                  // the throwaway database (PGlite)
+
+// A firm's n8n API key, read straight from the database (the app never shows it).
+const firmKey = async name => (await db.query('SELECT api_key FROM firms WHERE name = $1', [name])).rows[0].api_key;      // server output; local runs print emails here instead of sending them
 
 // Minimal cookie-keeping client, one per "browser". Redirects are not followed, so tests can check them.
 function client() {
@@ -85,16 +89,17 @@ async function main() {
   let s = (await partner('GET', '/api/state')).data;
   assert.equal(s.me.role, 'partner');
   assert.equal(s.settings.firmName, 'Alpha CA');
-  assert(s.settings.apiKey && s.settings.apiKey !== FIXTURE_KEY, 'each firm gets its own API key');
+  assert.equal(s.settings.apiKey, undefined, 'the API key is never sent to the browser');
+  const apiKey = await firmKey('Alpha CA');
+  assert(apiKey && apiKey !== FIXTURE_KEY, 'each firm gets its own API key');
   assert.deepEqual(s.clients, [], "a new firm sees none of the other firm's clients");
-  const apiKey = s.settings.apiKey;
 
   assert.equal((await partner('POST', '/api/users', { name: 'Staff', email: 'S@x.in', password: 'staffpass1', role: 'staff' })).status, 200);
   assert.equal((await partner('POST', '/api/users', { name: 'Dup', email: 's@x.in', password: 'staffpass1' })).status, 400, 'duplicate email rejected');
   assert.equal((await staff('POST', '/api/auth/login', { email: 's@x.in', password: 'wrong' })).status, 401);
   assert.equal((await staff('POST', '/api/auth/login', { email: 's@x.in', password: 'staffpass1' })).status, 200, 'email is case-insensitive');
   const staffState = (await staff('GET', '/api/state')).data;
-  assert.equal(staffState.settings.apiKey, null, 'staff cannot see API key');
+  assert.equal(staffState.settings.apiKey, undefined, 'staff cannot see the API key');
   assert.equal((await staff('PATCH', '/api/settings', { firmName: 'Hacked' })).status, 403, 'staff cannot change settings');
 
   // CSRF guard: form posts are refused
@@ -226,7 +231,7 @@ async function main() {
   assert.equal(s.leads.find(x => x.id === l.data.id).stage, 'proposal', 'Alpha lead untouched');
   assert.equal(s.invoices.find(x => x.id === big.data.id).approval, 'approved');
   assert.equal(s.users.length, 2, 'Alpha users untouched');
-  const betaKey = bs.settings.apiKey;
+  const betaKey = await firmKey('Beta CA');
   const n8nBeta = (method, url, body) => n8n(method, url, body, betaKey);
   assert.equal((await n8nBeta('GET', '/api/n8n/invoice-status?number=' + small.data.number)).data.status, 'Invoice not found', 'Beta key cannot look up Alpha invoices');
   assert.deepEqual((await n8nBeta('GET', '/api/n8n/gst-calendar')).data, []);
@@ -309,7 +314,7 @@ async function main() {
 
 (async () => {
   // Fresh database with the real schema plus another firm that has one overdue invoice.
-  const db = await PGlite.create();
+  db = await PGlite.create();
   await db.exec(fs.readFileSync(path.join(__dirname, 'db', 'schema.sql'), 'utf8'));
   await db.exec(`
     INSERT INTO firms (name, api_key) VALUES ('Fixture Firm', '${FIXTURE_KEY}');

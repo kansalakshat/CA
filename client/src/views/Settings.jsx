@@ -19,7 +19,6 @@ export default function Settings() {
           <ChangePassword />
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-          {isPartner && <N8nKey />}
           <Users />
         </div>
       </div>
@@ -48,26 +47,6 @@ function FirmSettings() {
       </div>
       <button className="btn btn-primary">Save</button>
     </form>
-  );
-}
-
-function N8nKey() {
-  const { S, act, toast } = useApp();
-  const copy = text => navigator.clipboard.writeText(text).then(() => toast('Copied'), () => toast('Copy failed, select and copy manually'));
-
-  return (
-    <div className="panel">
-      <div className="panel-title">🔑 Connecting n8n to this CRM</div>
-      <div className="text-sm" style={{ marginBottom: 6 }}>CRM address for n8n:</div>
-      <div className="code" style={{ marginBottom: 10 }}>{window.location.origin}</div>
-      <div className="text-sm" style={{ marginBottom: 6 }}>API key (n8n sends it as header <b>x-api-key</b>):</div>
-      <div className="code" style={{ marginBottom: 10 }}>{S.settings.apiKey}</div>
-      <div style={{ display: 'flex', gap: 8 }}>
-        <button className="btn btn-outline btn-sm" onClick={() => copy(S.settings.apiKey)}>Copy key</button>
-        <button className="btn btn-outline btn-sm" onClick={() => act('POST', '/api/settings/api-key', null, 'New key created. Update it in n8n too.')}>Create new key</button>
-      </div>
-      <div className="text-xs text-muted" style={{ marginTop: 10 }}>Import <b>n8n-workflow.json</b> into n8n and paste the key where it says YOUR_CRM_API_KEY. See README.</div>
-    </div>
   );
 }
 

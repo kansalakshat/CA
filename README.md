@@ -92,7 +92,7 @@ How it behaves: a Google email that already has an account logs straight into it
 ## Connecting n8n
 
 1. In n8n: **Import from file** → `n8n/n8n-workflow.json`.
-2. In the CRM: **Settings** → copy your firm's API key. In n8n, replace every `YOUR_CRM_API_KEY` with it (5 nodes whose names start with "CRM:"). The key tells the CRM which firm n8n is working for, so each firm uses its own copy of the workflow with its own key.
+2. Get your firm's API key from Supabase → **Table Editor** → `firms` → the `api_key` column of your firm's row (the app does not show it). In n8n, replace every `YOUR_CRM_API_KEY` with it (5 nodes whose names start with "CRM:"). The key tells the CRM which firm n8n is working for, so each firm uses its own copy of the workflow with its own key. Keep it secret; to replace it, put a new random value in that cell and update n8n.
 3. The workflow points at `http://localhost:3000`. If the CRM is on Vercel, regenerate it with your site address:
    `node n8n/make-workflow.js https://your-crm.vercel.app`
 4. In the CRM: **Settings** → set the n8n webhook URL (e.g. `https://your-n8n.example.com/webhook`).

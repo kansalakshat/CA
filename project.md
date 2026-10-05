@@ -82,7 +82,6 @@ Billed vs collected for the last 6 months, on-time filing rate, share of documen
 
 ### Settings
 - **Firm & n8n** (partners): firm name and the n8n webhook address.
-- **Connecting n8n** (partners): the CRM address and your firm's API key for n8n.
 - **Team Users:** see the team. Partners can add or remove people and choose Partner or Staff.
 - **Password:** change it, or set one if you only use Google.
 
@@ -93,7 +92,7 @@ Billed vs collected for the last 6 months, on-time filing rate, share of documen
 
 ## Automations with n8n (optional)
 
-The file `n8n/n8n-workflow.json` is a ready-made n8n workflow with 5 automations. They read and update this CRM using your firm's API key:
+The file `n8n/n8n-workflow.json` is a ready-made n8n workflow with 5 automations. They read and update this CRM using your firm's API key, which is kept in the database (Supabase → `firms` table) and not shown in the app:
 
 | Automation | When | What it does |
 |---|---|---|

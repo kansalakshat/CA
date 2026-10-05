@@ -331,7 +331,7 @@ const PUBLIC = new Set([
   'GET /api/auth/status', 'POST /api/auth/signup', 'POST /api/auth/login', 'POST /api/auth/resend-verification', 'GET /api/auth/verify',
   'GET /api/auth/google/start', 'GET /api/auth/google/callback', 'POST /api/auth/google/complete', 'POST /api/auth/google/cancel',
 ]);
-const PARTNER = new Set(['POST /api/invoices/:id/approve', 'POST /api/users', 'DELETE /api/users/:id', 'PATCH /api/settings', 'POST /api/settings/api-key']);
+const PARTNER = new Set(['POST /api/invoices/:id/approve', 'POST /api/users', 'DELETE /api/users/:id', 'PATCH /api/settings']);
 
 // A route returns { [REDIRECT]: '/path' } to send the browser somewhere instead of JSON.
 const REDIRECT = Symbol('redirect');
@@ -494,7 +494,7 @@ const routes = {
   // ponytail: loads all rows; add pagination if a firm grows past a few thousand records.
   'GET /api/state': async ({ user, firmId }) => {
     const [firm, users, clients, invoices, documents, filings, leads, tasks, messages, stats] = await Promise.all([
-      get('SELECT name, n8n_base_url, api_key FROM firms WHERE id = ?', firmId),
+      get('SELECT name, n8n_base_url FROM firms WHERE id = ?', firmId),
       all('SELECT id, name, email, role FROM users WHERE firm_id = ? ORDER BY name', firmId),
       all('SELECT * FROM clients WHERE firm_id = ? ORDER BY created_at DESC, id DESC', firmId),
       all(`${INVOICE_SQL} WHERE i.firm_id = ? ORDER BY i.paid_at IS NOT NULL, i.due_date`, firmId),
@@ -510,7 +510,7 @@ const routes = {
     ]);
     return {
       me: user, users,
-      settings: { firmName: firm.name, n8nBaseUrl: firm.n8n_base_url, apiKey: user.role === 'partner' ? firm.api_key : null },
+      settings: { firmName: firm.name, n8nBaseUrl: firm.n8n_base_url },
       clients, invoices, documents, filings, leads, tasks,
       messageCount: messages.n, agentStats: stats,
     };
@@ -690,11 +690,6 @@ const routes = {
     return { ok: true };
   },
 
-  'POST /api/settings/api-key': async ({ firmId }) => {
-    await run('UPDATE firms SET api_key = ? WHERE id = ?', newApiKey(), firmId);
-    return { ok: true };
-  },
-
   // ── For n8n: these replace the "Mock ..." nodes. Field names match the mock data exactly. ──
   // Invoices still waiting for partner approval were never sent, so they are not chased.
   'GET /api/n8n/overdue-invoices': async ({ firmId }) =>
@@ -768,7 +763,7 @@ async function handler(req, res) {
       // The API key identifies the firm. Unique random 48-character keys, so a plain lookup is safe.
       const key = String(req.headers['x-api-key'] || '');
       const firm = key.length >= 32 && await get('SELECT id FROM firms WHERE api_key = ?', key);
-      if (!firm) throw new HttpError(401, 'Missing or wrong x-api-key (see Settings page)');
+      if (!firm) throw new HttpError(401, 'Missing or wrong x-api-key');
       firmId = firm.id;
     } else if (!PUBLIC.has(m.key)) {
       user = await sessionUser(req);
