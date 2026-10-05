@@ -1,0 +1,2024 @@
+{
+  "name": "Accounting Services - 5 Automation Suite (CRM connected)",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "accounting/new-invoice",
+        "options": {}
+      },
+      "id": "ba0bcad8-0be4-4973-91df-a1ce24b85411",
+      "name": "New Invoice Request",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        208
+      ],
+      "webhookId": "67d0d7d4-2a56-4ae6-b275-bb5e409f1aa6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "inv-client",
+              "name": "clientName",
+              "type": "string",
+              "value": "={{ $json.body?.clientName ?? \"Sharma Traders Pvt Ltd\" }}"
+            },
+            {
+              "id": "inv-email",
+              "name": "clientEmail",
+              "type": "string",
+              "value": "={{ $json.body?.clientEmail ?? \"accounts@sharma-traders.example.com\" }}"
+            },
+            {
+              "id": "inv-phone",
+              "name": "clientPhone",
+              "type": "string",
+              "value": "={{ $json.body?.clientPhone ?? \"+919000000001\" }}"
+            },
+            {
+              "id": "inv-service",
+              "name": "serviceDescription",
+              "type": "string",
+              "value": "={{ $json.body?.serviceDescription ?? \"Monthly bookkeeping and GST filing - Sep 2026\" }}"
+            },
+            {
+              "id": "inv-amount",
+              "name": "amount",
+              "type": "number",
+              "value": "={{ $json.body?.amount ?? 75000 }}"
+            },
+            {
+              "id": "inv-gst",
+              "name": "gstRate",
+              "type": "number",
+              "value": "={{ $json.body?.gstRate ?? 18 }}"
+            },
+            {
+              "id": "inv-due",
+              "name": "dueDays",
+              "type": "number",
+              "value": "={{ $json.body?.dueDays ?? 15 }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8c0e78d3-b60e-442a-83e6-4879215dbf7a",
+      "name": "Read Invoice Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        272,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "calc-gst",
+              "name": "gstAmount",
+              "value": "={{ $json.amount * $json.gstRate / 100 }}",
+              "type": "number"
+            },
+            {
+              "id": "calc-total",
+              "name": "totalAmount",
+              "value": "={{ $json.amount + ($json.amount * $json.gstRate / 100) }}",
+              "type": "number"
+            },
+            {
+              "id": "calc-number",
+              "name": "invoiceNumber",
+              "value": "={{ $('New Invoice Request').item.json.body?.invoiceNumber ?? ('INV-' + $now.toFormat('yyyyMMdd') + '-001') }}",
+              "type": "string"
+            },
+            {
+              "id": "calc-due",
+              "name": "dueDate",
+              "value": "={{ $now.plus({ days: $json.dueDays }).toFormat(\"dd MMM yyyy\") }}",
+              "type": "string"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "63763fae-4d6c-4ac6-a815-dfd34690cc50",
+      "name": "Calculate GST and Totals",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        528,
+        208
+      ]
+    },
+    {
+      "parameters": {},
+      "id": "eea61717-0eea-4c4a-850c-0815676ae790",
+      "name": "Push to Accounting Software (Zoho / Tally / QuickBooks)",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        784,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.totalAmount }}",
+              "operator": {
+                "type": "number",
+                "operation": "gt"
+              },
+              "rightValue": 50000
+            },
+            {
+              "leftValue": "={{ $('New Invoice Request').item.json.body?.approved === true }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "false",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "370e2486-bd1d-46b6-b38f-9b9b756255f7",
+      "name": "High Value Invoice (above 50,000)?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1040,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "partner@yourfirm.example.com",
+        "subject": "=Approval needed: {{ $json.invoiceNumber }} for {{ $json.clientName }}",
+        "emailType": "text",
+        "message": "=Invoice {{ $json.invoiceNumber }} for {{ $json.clientName }} totals Rs. {{ $json.totalAmount }} (incl. GST Rs. {{ $json.gstAmount }}).\nPlease review and approve before it is sent to the client.\n\nApprove it in the CRM (Invoices page). Once approved, it is sent to the client automatically.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7d5b383a-13c8-4505-9c20-7753f518678b",
+      "name": "Request Partner Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        112
+      ],
+      "webhookId": "2de7ee04-ac65-4779-91e1-35112af28522",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=Invoice {{ $json.invoiceNumber }} from Your Firm Name",
+        "emailType": "text",
+        "message": "=Dear {{ $json.clientName }},\n\nPlease find your invoice {{ $json.invoiceNumber }} for: {{ $json.serviceDescription }}.\n\nAmount: Rs. {{ $json.amount }}\nGST ({{ $json.gstRate }}%): Rs. {{ $json.gstAmount }}\nTotal payable: Rs. {{ $json.totalAmount }}\nDue date: {{ $json.dueDate }}\n\nPayment link: https://pay.yourfirm.example.com/pay\n\nRegards,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "769de41e-9215-414f-b78e-df300c31b4c9",
+      "name": "Send Invoice to Client",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1312,
+        304
+      ],
+      "webhookId": "e72db354-b229-4ecf-ae02-c94cd170a828",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "id": "749d6c47-2fb8-4336-8bc9-ddd895dc5050",
+      "name": "Already Saved in CRM",
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        1824,
+        304
+      ]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "4bc51d2a-912c-412b-9cf9-d515e1bb99ef",
+      "name": "Daily 10:00 Overdue Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/n8n/overdue-invoices",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_CRM_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8fd530f2-c8ad-4895-b2d9-43a1ac0eb745",
+      "name": "CRM: Overdue Invoices",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        272,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.daysOverdue }}",
+                    "operator": {
+                      "type": "number",
+                      "operation": "lte"
+                    },
+                    "rightValue": 7
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Gentle (up to 7 days)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.daysOverdue }}",
+                    "operator": {
+                      "type": "number",
+                      "operation": "lte"
+                    },
+                    "rightValue": 15
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Firm (8 to 15 days)"
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 1
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.daysOverdue }}",
+                    "operator": {
+                      "type": "number",
+                      "operation": "lte"
+                    },
+                    "rightValue": 30
+                  }
+                ],
+                "combinator": "and"
+              },
+              "renameOutput": true,
+              "outputKey": "Final notice (16 to 30 days)"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Escalate (over 30 days)"
+        }
+      },
+      "id": "d5ae50cd-c4ad-4a80-b567-6571f5448505",
+      "name": "Escalation Stage by Days Overdue",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        528,
+        912
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=Payment overdue: {{ $json.invoiceNumber }} ({{ $json.daysOverdue }} days)",
+        "emailType": "text",
+        "message": "=Dear {{ $json.clientName }},\n\nInvoice {{ $json.invoiceNumber }} for Rs. {{ $json.amountDue }} is now {{ $json.daysOverdue }} days overdue. Please clear the payment within 3 working days or let us know the expected date.\n\nPay here: https://pay.yourfirm.example.com/pay\n\nRegards,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "7579c23e-0ce2-4e54-a530-efe69595fcda",
+      "name": "Firm Reminder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        864
+      ],
+      "webhookId": "bc74b356-8705-4ba1-9e0e-2fc4c5e47326",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=FINAL NOTICE: {{ $json.invoiceNumber }}",
+        "emailType": "text",
+        "message": "=Dear {{ $json.clientName }},\n\nThis is a final notice for invoice {{ $json.invoiceNumber }} (Rs. {{ $json.amountDue }}), overdue by {{ $json.daysOverdue }} days. Services may be paused if payment is not received within 7 days.\n\nRegards,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false,
+          "ccList": "partner@yourfirm.example.com"
+        }
+      },
+      "id": "70db417c-aec4-4473-9a5e-70bf93921d12",
+      "name": "Final Notice",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        1024
+      ],
+      "webhookId": "1864970d-32c6-4ca2-8d4d-4187d8adf29f",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "partner@yourfirm.example.com",
+        "subject": "=Escalation: {{ $json.clientName }} overdue {{ $json.daysOverdue }} days",
+        "emailType": "text",
+        "message": "={{ $json.clientName }} has not paid {{ $json.invoiceNumber }} (Rs. {{ $json.amountDue }}) for {{ $json.daysOverdue }} days. Please call the client personally and decide on next steps.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "e41b8fbf-1633-4c14-94f9-bfd773ce7473",
+      "name": "Escalate to Partner (Internal)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        1184
+      ],
+      "webhookId": "4edf2d1f-aa70-4e87-abca-0bd7c7d0670d",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "months",
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "id": "561dabd4-348a-427b-8a40-d019299b3979",
+      "name": "Monthly GST Cycle (1st of month)",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/n8n/gst-calendar",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_CRM_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "86dbd65b-226c-4e92-b11a-6de9d4394d68",
+      "name": "CRM: GST Calendar",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        272,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.dataReceived }}",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              },
+              "rightValue": ""
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "d9790f41-af21-470c-91aa-13ac6114af38",
+      "name": "Client Data Received?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        528,
+        1712
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "gst-net",
+              "name": "netPayable",
+              "value": "={{ $json.outputTax - $json.inputTaxCredit }}",
+              "type": "number"
+            }
+          ]
+        },
+        "includeOtherFields": true,
+        "options": {}
+      },
+      "id": "1986ec65-739f-4ed6-a412-2ed46fa63ceb",
+      "name": "Compute Net GST Payable",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        784,
+        1600
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "={{ $json.returnType }} for {{ $json.period }}: summary for your approval",
+        "emailType": "text",
+        "message": "=Dear {{ $json.clientName }},\n\n{{ $json.returnType }} for {{ $json.period }} is ready.\n\nOutput tax: Rs. {{ $json.outputTax }}\nInput tax credit: Rs. {{ $json.inputTaxCredit }}\nNet payable: Rs. {{ $json.netPayable }}\nDue date: {{ $json.dueDate }}\n\nReply YES to approve filing.\n\nRegards,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "1e3adfec-292e-4227-95ee-ec329a94fd6f",
+      "name": "Send Filing Summary for Approval",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        1040,
+        1600
+      ],
+      "webhookId": "5fc66d3b-f28a-4cd4-9652-659958e060a1",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=Action needed: data for {{ $json.returnType }} ({{ $json.period }}), due {{ $json.dueDate }}",
+        "emailType": "text",
+        "message": "=Dear {{ $json.clientName }},\n\nTo file {{ $json.returnType }} for {{ $json.period }} by {{ $json.dueDate }}, we still need your sales register, purchase register and any credit notes.\n\nUpload here: https://upload.yourfirm.example.com\n\nRegards,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "8ce5645c-df80-4901-9bd4-9800cd6e375c",
+      "name": "Request Missing Sales and Purchase Data",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        1808
+      ],
+      "webhookId": "4121dfe8-946a-4dbb-a13b-bf8b030c7977",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "weeks",
+              "triggerAtDay": [
+                1
+              ],
+              "triggerAtHour": 10
+            }
+          ]
+        }
+      },
+      "id": "cfacd95c-ab05-4368-b4e1-57b034d03d9d",
+      "name": "Weekly Monday 10:00 Document Chase",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "url": "http://localhost:3000/api/n8n/pending-documents",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_CRM_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7c9096ba-234e-44cb-8195-b4c12979edb3",
+      "name": "CRM: Pending Documents",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        272,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "loose",
+            "version": 1
+          },
+          "conditions": [
+            {
+              "leftValue": "={{ $json.reminderCount }}",
+              "operator": {
+                "type": "number",
+                "operation": "gte"
+              },
+              "rightValue": 3
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "ed3cde8e-a209-427c-b9f2-c180d06d3cc7",
+      "name": "Reminded 3 Times Already?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        528,
+        2512
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "team@yourfirm.example.com",
+        "subject": "=Call needed: {{ $json.clientName }} still pending {{ $json.daysPending }} days",
+        "emailType": "text",
+        "message": "={{ $json.clientName }} has been reminded {{ $json.reminderCount }} times. Still missing: {{ $json.missingDocuments }}. Please call the client directly.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "965af909-478a-4804-b287-f8ce53aafc67",
+      "name": "Alert Team to Call Client (Internal)",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        2400
+      ],
+      "webhookId": "7961d42d-9a8e-4595-acd0-45ddb5dda336",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=Documents needed from {{ $json.clientName }}",
+        "emailType": "text",
+        "message": "=Hi {{ $json.clientName }},\n\nWe are still waiting for: {{ $json.missingDocuments }}.\n\nYou can upload them here: https://upload.yourfirm.example.com\n\nThank you,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "ab81df22-b06f-4908-a1cf-963e39147b0c",
+      "name": "Send Document Request Reminder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        784,
+        2608
+      ],
+      "webhookId": "9dff7515-cac4-4cbc-9f99-9380e36450dd",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://localhost:3000/api/n8n/documents-reminded",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_CRM_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { clientId: $('CRM: Pending Documents').item.json.clientId } }}",
+        "options": {}
+      },
+      "id": "9bd81e8a-030d-4736-90d5-af51eb537e23",
+      "name": "CRM: Update Reminder Count",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1568,
+        2608
+      ]
+    },
+    {
+      "parameters": {
+        "options": {
+          "responseMode": "streaming"
+        }
+      },
+      "id": "4364452c-45df-415b-902c-cf39305d454a",
+      "name": "Client Support Chat",
+      "type": "@n8n/n8n-nodes-langchain.chatTrigger",
+      "typeVersion": 1.5,
+      "position": [
+        0,
+        3104
+      ],
+      "webhookId": "a38b0356-0ba9-45ef-94f6-56d919c8d8d1"
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $json.chatInput }}",
+        "options": {
+          "systemMessage": "You are the client support assistant for Your Firm Name, an accounting and tax firm in India.\nYou talk to clients over web chat, WhatsApp and phone (voice). Answer questions about GST and income tax due dates, required documents, invoice status, and our services in simple, friendly language.\nReply in the same language the client uses (Hindi, English or Hinglish).\nFor voice calls keep every answer to one or two short sentences, with no lists or symbols.\nUse the CRM: Check Invoice Status tool when a client gives an invoice number.\nKnowledge base: GSTR-1 is due on the 11th and GSTR-3B on the 20th of every month. Monthly bookkeeping packages start at Rs. 5,000.\nNever give legal or investment advice. If you are unsure, say a team member will follow up within one working day."
+        }
+      },
+      "id": "63367bb1-a152-4cfc-a7d7-e1c5bb0422cd",
+      "name": "Accounting Support Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        608,
+        3312
+      ]
+    },
+    {
+      "parameters": {
+        "model": {
+          "__rl": true,
+          "mode": "list",
+          "value": "gpt-5-mini"
+        },
+        "builtInTools": {},
+        "options": {}
+      },
+      "id": "38c97dc3-eb9c-46cb-952b-e00c3618361b",
+      "name": "OpenAI Chat Model",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [
+        608,
+        3632
+      ],
+      "credentials": {
+        "openAiApi": {
+          "id": "RhRseIhDQ5tqlFaf",
+          "name": "OpenAI account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 10
+      },
+      "id": "402bdff1-5cd4-422a-a27d-7294f12c25b9",
+      "name": "Chat Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.4,
+      "position": [
+        800,
+        3632
+      ]
+    },
+    {
+      "parameters": {
+        "toolDescription": "Look up the payment status of an invoice. Use when the client mentions an invoice number like INV-2026-001.",
+        "url": "http://localhost:3000/api/n8n/invoice-status",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "number",
+              "value": "={{ $fromAI('invoiceNumber', 'The invoice number, for example INV-2026-001', 'string') }}"
+            }
+          ]
+        },
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "x-api-key",
+              "value": "YOUR_CRM_API_KEY"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "84e9cd16-122a-4bd1-b2e7-4357d6b05ea2",
+      "name": "CRM: Check Invoice Status",
+      "type": "n8n-nodes-base.httpRequestTool",
+      "typeVersion": 4.2,
+      "position": [
+        1008,
+        3632
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 1. Invoice Automation\nWebhook receives an invoice request, GST and total are calculated, record is pushed to the accounting tool. Invoices above Rs. 50,000 go for partner approval; others are emailed and also sent on WhatsApp.\n\nTo activate: add Gmail credential, WhatsApp token and phone number ID in the HTTP node, and replace placeholder emails, phones and links.",
+        "height": 460,
+        "width": 2100,
+        "color": 4
+      },
+      "id": "3ede86f0-9948-4896-8632-c5ce06bf4726",
+      "name": "Sticky Note 54c87833",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        -16
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 2. Payment Recovery Automation\nEvery morning, overdue invoices are routed by days overdue. Each client-facing stage sends Email, then WhatsApp, then an AI voice call (Sarvam voice agent via HTTP). 30+ days goes to the partner.\n\nTo activate: replace mock Code node with real data; fill Sarvam org ID, workspace ID, API key, agent app ID, connection ID and agent phone number in the Voice Call nodes.",
+        "height": 780,
+        "width": 1700,
+        "color": 3
+      },
+      "id": "09056f98-4d85-45e7-b5bc-e7a49d131251",
+      "name": "Sticky Note 1d3e8220",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        592
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 3. GST / Tax Compliance Automation\nOn the 1st of each month, each client return is checked. Data received: net GST payable is computed and the summary goes by Email and WhatsApp. Data missing: client gets Email, WhatsApp and an AI voice call asking for registers.\n\nTo activate: replace mock data and fill the Sarvam and WhatsApp placeholders.",
+        "height": 480,
+        "width": 1650,
+        "color": 5
+      },
+      "id": "52cd8127-a570-4366-bcbf-26237323c640",
+      "name": "Sticky Note 36257341",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        1488
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 4. Document Collection Automation\nEvery Monday, clients with pending documents get Email, WhatsApp and an AI voice call. After 3 reminders the team is alerted to call the client.\n\nTo activate: connect your tracker, set your real upload link and fill the Sarvam and WhatsApp placeholders.",
+        "height": 480,
+        "width": 1850,
+        "color": 6
+      },
+      "id": "2ddc7eec-a90f-4d5a-9b6b-3e0aa60c8e01",
+      "name": "Sticky Note 0240b7ea",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        2288
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## 5. AI Client Support (Web chat + WhatsApp + Voice)\nOne AI agent answers three channels. Web chat streams directly. WhatsApp messages arrive on the incoming webhook and the reply goes back via the WhatsApp HTTP node. For voice, the Sarvam voice agent calls the voice webhook as a tool with the caller's question, and n8n returns the answer for the agent to speak.\n\nTo activate: add OpenAI credential on the Chat Model node, point the Meta WhatsApp webhook to the incoming URL, set the Sarvam agent tool URL to the voice webhook, and replace the mock knowledge base.",
+        "height": 860,
+        "width": 1500,
+        "color": 7
+      },
+      "id": "61d377e0-56c4-402e-a38f-736ad928e26d",
+      "name": "Sticky Note 16028b73",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        -64,
+        2992
+      ]
+    },
+    {
+      "parameters": {
+        "sendTo": "={{ $json.clientEmail }}",
+        "subject": "=Friendly reminder: {{ $json.invoiceNumber }}",
+        "emailType": "text",
+        "message": "=Hi {{ $json.clientName }},\n\nJust a quick reminder that invoice {{ $json.invoiceNumber }} of Rs. {{ $json.amountDue }} is {{ $json.daysOverdue }} days past due. If you have already paid, please ignore this note.\n\nPay here: https://pay.yourfirm.example.com/pay\n\nThank you,\nYour Firm Name",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "id": "8d6b26c1-5511-4c93-a235-69b84c838289",
+      "name": "Gentle Reminder",
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        832,
+        704
+      ],
+      "webhookId": "e242557f-9d3b-41b2-8274-69aa08f43abb",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "UreTYiQROfJsltCU",
+          "name": "fitness stiudio"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('Calculate GST and Totals').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'Hi ' + $('Calculate GST and Totals').item.json.clientName + ', your invoice ' + $('Calculate GST and Totals').item.json.invoiceNumber + ' for Rs. ' + $('Calculate GST and Totals').item.json.totalAmount + ' is ready (due ' + $('Calculate GST and Totals').item.json.dueDate + '). Pay here: https://pay.yourfirm.example.com/pay' } } }}",
+        "options": {}
+      },
+      "id": "ab1ab309-99a2-4d39-84cd-c5b527da6379",
+      "name": "WhatsApp Invoice Notification",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1568,
+        304
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('CRM: Overdue Invoices').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'Hi ' + $('CRM: Overdue Invoices').item.json.clientName + ', gentle reminder: invoice ' + $('CRM: Overdue Invoices').item.json.invoiceNumber + ' of Rs. ' + $('CRM: Overdue Invoices').item.json.amountDue + ' is ' + $('CRM: Overdue Invoices').item.json.daysOverdue + ' days past due. Pay here: https://pay.yourfirm.example.com/pay' } } }}",
+        "options": {}
+      },
+      "id": "d3a59f0a-bbde-4214-8801-c9b7db6acf2a",
+      "name": "WhatsApp Gentle Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        704
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apps.sarvam.ai/api/outbounds/v1/orgs/YOUR_ORG_ID/workspaces/YOUR_WORKSPACE_ID/outbounds",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "YOUR_SARVAM_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { app_config: { app_id: 'YOUR_SARVAM_AGENT_APP_ID', app_version: 1, connection_config: { connection_id: 'YOUR_CONNECTION_ID', agent_phone_number: 'YOUR_AGENT_PHONE_NUMBER' }, agent_variables: { client_name: $('CRM: Overdue Invoices').item.json.clientName, purpose: 'payment_reminder_gentle', invoice_number: $('CRM: Overdue Invoices').item.json.invoiceNumber, amount_due: $('CRM: Overdue Invoices').item.json.amountDue, days_overdue: $('CRM: Overdue Invoices').item.json.daysOverdue }, app_overrides: { initial_language_name: 'Hindi' } }, user_config: { user_phone_number: $('CRM: Overdue Invoices').item.json.clientPhone } } }}",
+        "options": {}
+      },
+      "id": "46626c10-82f1-4fb1-9375-37a5e152307e",
+      "name": "Voice Call Gentle Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1344,
+        704
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('CRM: Overdue Invoices').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'Dear ' + $('CRM: Overdue Invoices').item.json.clientName + ', invoice ' + $('CRM: Overdue Invoices').item.json.invoiceNumber + ' of Rs. ' + $('CRM: Overdue Invoices').item.json.amountDue + ' is ' + $('CRM: Overdue Invoices').item.json.daysOverdue + ' days overdue. Please pay within 3 working days: https://pay.yourfirm.example.com/pay' } } }}",
+        "options": {}
+      },
+      "id": "f131f1ae-72d2-4f88-8cec-46c633729df4",
+      "name": "WhatsApp Firm Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        864
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apps.sarvam.ai/api/outbounds/v1/orgs/YOUR_ORG_ID/workspaces/YOUR_WORKSPACE_ID/outbounds",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "YOUR_SARVAM_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { app_config: { app_id: 'YOUR_SARVAM_AGENT_APP_ID', app_version: 1, connection_config: { connection_id: 'YOUR_CONNECTION_ID', agent_phone_number: 'YOUR_AGENT_PHONE_NUMBER' }, agent_variables: { client_name: $('CRM: Overdue Invoices').item.json.clientName, purpose: 'payment_reminder_firm', invoice_number: $('CRM: Overdue Invoices').item.json.invoiceNumber, amount_due: $('CRM: Overdue Invoices').item.json.amountDue, days_overdue: $('CRM: Overdue Invoices').item.json.daysOverdue }, app_overrides: { initial_language_name: 'Hindi' } }, user_config: { user_phone_number: $('CRM: Overdue Invoices').item.json.clientPhone } } }}",
+        "options": {}
+      },
+      "id": "528135bb-8e0c-42f0-894d-f3a81149d449",
+      "name": "Voice Call Firm Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1344,
+        864
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('CRM: Overdue Invoices').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'FINAL NOTICE: ' + $('CRM: Overdue Invoices').item.json.clientName + ', invoice ' + $('CRM: Overdue Invoices').item.json.invoiceNumber + ' (Rs. ' + $('CRM: Overdue Invoices').item.json.amountDue + ') is ' + $('CRM: Overdue Invoices').item.json.daysOverdue + ' days overdue. Services may be paused if payment is not received within 7 days.' } } }}",
+        "options": {}
+      },
+      "id": "cbc0d0af-e3a7-4b3d-bc92-cf26b20dbc81",
+      "name": "WhatsApp Final Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1088,
+        1024
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apps.sarvam.ai/api/outbounds/v1/orgs/YOUR_ORG_ID/workspaces/YOUR_WORKSPACE_ID/outbounds",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "YOUR_SARVAM_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { app_config: { app_id: 'YOUR_SARVAM_AGENT_APP_ID', app_version: 1, connection_config: { connection_id: 'YOUR_CONNECTION_ID', agent_phone_number: 'YOUR_AGENT_PHONE_NUMBER' }, agent_variables: { client_name: $('CRM: Overdue Invoices').item.json.clientName, purpose: 'payment_final_notice', invoice_number: $('CRM: Overdue Invoices').item.json.invoiceNumber, amount_due: $('CRM: Overdue Invoices').item.json.amountDue, days_overdue: $('CRM: Overdue Invoices').item.json.daysOverdue }, app_overrides: { initial_language_name: 'Hindi' } }, user_config: { user_phone_number: $('CRM: Overdue Invoices').item.json.clientPhone } } }}",
+        "options": {}
+      },
+      "id": "16faf5a1-0924-4bf3-8262-2856234c44dc",
+      "name": "Voice Call Final Notice",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1344,
+        1024
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('CRM: GST Calendar').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'Hi ' + $('CRM: GST Calendar').item.json.clientName + ', ' + $('CRM: GST Calendar').item.json.returnType + ' for ' + $('CRM: GST Calendar').item.json.period + ' is ready. Net payable: Rs. ' + $('Compute Net GST Payable').item.json.netPayable + '. Please check your email and reply YES to approve.' } } }}",
+        "options": {}
+      },
+      "id": "6fd231e6-6eab-4606-86ab-6d0d15a9890c",
+      "name": "WhatsApp Filing Summary",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1312,
+        1600
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('CRM: GST Calendar').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'Hi ' + $('CRM: GST Calendar').item.json.clientName + ', we still need your sales and purchase registers to file ' + $('CRM: GST Calendar').item.json.returnType + ' for ' + $('CRM: GST Calendar').item.json.period + ' (due ' + $('CRM: GST Calendar').item.json.dueDate + '). Upload: https://upload.yourfirm.example.com' } } }}",
+        "options": {}
+      },
+      "id": "ce05e1b5-e7c8-4c8c-80a8-956b304b92f5",
+      "name": "WhatsApp Missing Data Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1040,
+        1808
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apps.sarvam.ai/api/outbounds/v1/orgs/YOUR_ORG_ID/workspaces/YOUR_WORKSPACE_ID/outbounds",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "YOUR_SARVAM_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { app_config: { app_id: 'YOUR_SARVAM_AGENT_APP_ID', app_version: 1, connection_config: { connection_id: 'YOUR_CONNECTION_ID', agent_phone_number: 'YOUR_AGENT_PHONE_NUMBER' }, agent_variables: { client_name: $('CRM: GST Calendar').item.json.clientName, purpose: 'gst_data_request', return_type: $('CRM: GST Calendar').item.json.returnType, period: $('CRM: GST Calendar').item.json.period, due_date: $('CRM: GST Calendar').item.json.dueDate }, app_overrides: { initial_language_name: 'Hindi' } }, user_config: { user_phone_number: $('CRM: GST Calendar').item.json.clientPhone } } }}",
+        "options": {}
+      },
+      "id": "15d8edac-944a-469c-99a3-280251ae6526",
+      "name": "Voice Call Missing Data Request",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1312,
+        1808
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('CRM: Pending Documents').item.json.clientPhone.replace('+', ''), type: 'text', text: { body: 'Hi ' + $('CRM: Pending Documents').item.json.clientName + ', we are still waiting for: ' + $('CRM: Pending Documents').item.json.missingDocuments + '. Upload here: https://upload.yourfirm.example.com' } } }}",
+        "options": {}
+      },
+      "id": "8c0a85c7-3065-47ba-9bb3-dce71a99a62b",
+      "name": "WhatsApp Document Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1040,
+        2608
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://apps.sarvam.ai/api/outbounds/v1/orgs/YOUR_ORG_ID/workspaces/YOUR_WORKSPACE_ID/outbounds",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "X-API-Key",
+              "value": "YOUR_SARVAM_API_KEY"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { app_config: { app_id: 'YOUR_SARVAM_AGENT_APP_ID', app_version: 1, connection_config: { connection_id: 'YOUR_CONNECTION_ID', agent_phone_number: 'YOUR_AGENT_PHONE_NUMBER' }, agent_variables: { client_name: $('CRM: Pending Documents').item.json.clientName, purpose: 'document_collection', missing_documents: $('CRM: Pending Documents').item.json.missingDocuments }, app_overrides: { initial_language_name: 'Hindi' } }, user_config: { user_phone_number: $('CRM: Pending Documents').item.json.clientPhone } } }}",
+        "options": {}
+      },
+      "id": "95053777-bc50-4ae5-a24e-47e1502f4461",
+      "name": "Voice Call Document Reminder",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1312,
+        2608
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "accounting/whatsapp-in",
+        "options": {}
+      },
+      "id": "06a537b2-ed20-4e8f-80e7-235f38cd8594",
+      "name": "WhatsApp Incoming Message",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        3312
+      ],
+      "webhookId": "ab1b5100-a2c8-47fc-80e8-c27b6ad9a41d"
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "accounting/voice-in",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "226b4b7f-23f5-4498-95f9-19b3078496e6",
+      "name": "Voice Agent Question (Sarvam tool call)",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        3504
+      ],
+      "webhookId": "419a0a3c-d1d4-4fdf-8f27-9659bee6ebe6"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "wa-input",
+              "name": "chatInput",
+              "type": "string",
+              "value": "={{ $json.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.text?.body ?? $json.body?.message ?? \"What is the due date for GSTR-3B?\" }}"
+            },
+            {
+              "id": "wa-phone",
+              "name": "phone",
+              "type": "string",
+              "value": "={{ $json.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ?? $json.body?.phone ?? \"919000000001\" }}"
+            },
+            {
+              "id": "wa-channel",
+              "name": "channel",
+              "type": "string",
+              "value": "whatsapp"
+            },
+            {
+              "id": "wa-session",
+              "name": "sessionId",
+              "type": "string",
+              "value": "={{ $json.body?.entry?.[0]?.changes?.[0]?.value?.messages?.[0]?.from ?? $json.body?.phone ?? \"919000000001\" }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "6d5fb3e6-496c-4b11-b32b-91736b6ae9c8",
+      "name": "Normalize WhatsApp Message",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        304,
+        3312
+      ]
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "vc-input",
+              "name": "chatInput",
+              "type": "string",
+              "value": "={{ $json.body?.question ?? \"Mera GSTR-3B kab bharna hai?\" }}"
+            },
+            {
+              "id": "vc-phone",
+              "name": "phone",
+              "type": "string",
+              "value": "={{ $json.body?.phone ?? \"+919000000001\" }}"
+            },
+            {
+              "id": "vc-channel",
+              "name": "channel",
+              "type": "string",
+              "value": "voice"
+            },
+            {
+              "id": "vc-session",
+              "name": "sessionId",
+              "type": "string",
+              "value": "={{ $json.body?.phone ?? \"+919000000001\" }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "ccc03468-5d13-480c-9981-cfb6c7e90586",
+      "name": "Normalize Voice Question",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 3.5,
+      "position": [
+        304,
+        3504
+      ]
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Normalize WhatsApp Message\").isExecuted }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "WhatsApp"
+            },
+            {
+              "conditions": {
+                "combinator": "and",
+                "conditions": [
+                  {
+                    "leftValue": "={{ $(\"Normalize Voice Question\").isExecuted }}",
+                    "operator": {
+                      "operation": "true",
+                      "singleValue": true,
+                      "type": "boolean"
+                    },
+                    "rightValue": ""
+                  }
+                ],
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "loose",
+                  "version": 1
+                }
+              },
+              "renameOutput": true,
+              "outputKey": "Voice"
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra",
+          "renameFallbackOutput": "Web chat (streams directly)"
+        }
+      },
+      "id": "5dc6eef3-4ea7-427a-bf28-78f42cdecde2",
+      "name": "Route Reply by Channel",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.4,
+      "position": [
+        944,
+        3312
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://graph.facebook.com/v21.0/YOUR_PHONE_NUMBER_ID/messages",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Authorization",
+              "value": "Bearer YOUR_WHATSAPP_ACCESS_TOKEN"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { messaging_product: 'whatsapp', to: $('Normalize WhatsApp Message').item.json.phone.replace('+', ''), type: 'text', text: { body: $json.output } } }}",
+        "options": {}
+      },
+      "id": "98b13734-af33-4a1f-8e23-0665d6111b28",
+      "name": "WhatsApp Send AI Reply",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.3,
+      "position": [
+        1248,
+        3200
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ { answer: $json.output } }}",
+        "options": {}
+      },
+      "id": "81c1cd67-6265-499d-b4af-1e241d033c1a",
+      "name": "Respond to Voice Agent",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.5,
+      "position": [
+        1248,
+        3408
+      ]
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "New Invoice Request": {
+      "main": [
+        [
+          {
+            "node": "Read Invoice Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Invoice Request": {
+      "main": [
+        [
+          {
+            "node": "Calculate GST and Totals",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Calculate GST and Totals": {
+      "main": [
+        [
+          {
+            "node": "Push to Accounting Software (Zoho / Tally / QuickBooks)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Push to Accounting Software (Zoho / Tally / QuickBooks)": {
+      "main": [
+        [
+          {
+            "node": "High Value Invoice (above 50,000)?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "High Value Invoice (above 50,000)?": {
+      "main": [
+        [
+          {
+            "node": "Request Partner Approval",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Invoice to Client",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Daily 10:00 Overdue Check": {
+      "main": [
+        [
+          {
+            "node": "CRM: Overdue Invoices",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM: Overdue Invoices": {
+      "main": [
+        [
+          {
+            "node": "Escalation Stage by Days Overdue",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Escalation Stage by Days Overdue": {
+      "main": [
+        [
+          {
+            "node": "Gentle Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Firm Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Final Notice",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Escalate to Partner (Internal)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Monthly GST Cycle (1st of month)": {
+      "main": [
+        [
+          {
+            "node": "CRM: GST Calendar",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM: GST Calendar": {
+      "main": [
+        [
+          {
+            "node": "Client Data Received?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Data Received?": {
+      "main": [
+        [
+          {
+            "node": "Compute Net GST Payable",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Request Missing Sales and Purchase Data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Net GST Payable": {
+      "main": [
+        [
+          {
+            "node": "Send Filing Summary for Approval",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Weekly Monday 10:00 Document Chase": {
+      "main": [
+        [
+          {
+            "node": "CRM: Pending Documents",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM: Pending Documents": {
+      "main": [
+        [
+          {
+            "node": "Reminded 3 Times Already?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Reminded 3 Times Already?": {
+      "main": [
+        [
+          {
+            "node": "Alert Team to Call Client (Internal)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Document Request Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Client Support Chat": {
+      "main": [
+        [
+          {
+            "node": "Accounting Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Accounting Support Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Chat Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "Accounting Support Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "CRM: Check Invoice Status": {
+      "ai_tool": [
+        [
+          {
+            "node": "Accounting Support Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Invoice to Client": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Invoice Notification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Invoice Notification": {
+      "main": [
+        [
+          {
+            "node": "Already Saved in CRM",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gentle Reminder": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Gentle Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Gentle Reminder": {
+      "main": [
+        [
+          {
+            "node": "Voice Call Gentle Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Firm Reminder": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Firm Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Firm Reminder": {
+      "main": [
+        [
+          {
+            "node": "Voice Call Firm Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Final Notice": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Final Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Final Notice": {
+      "main": [
+        [
+          {
+            "node": "Voice Call Final Notice",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Filing Summary for Approval": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Filing Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Request Missing Sales and Purchase Data": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Missing Data Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Missing Data Request": {
+      "main": [
+        [
+          {
+            "node": "Voice Call Missing Data Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Document Request Reminder": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Document Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Document Reminder": {
+      "main": [
+        [
+          {
+            "node": "Voice Call Document Reminder",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Call Document Reminder": {
+      "main": [
+        [
+          {
+            "node": "CRM: Update Reminder Count",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "WhatsApp Incoming Message": {
+      "main": [
+        [
+          {
+            "node": "Normalize WhatsApp Message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Voice Agent Question (Sarvam tool call)": {
+      "main": [
+        [
+          {
+            "node": "Normalize Voice Question",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize WhatsApp Message": {
+      "main": [
+        [
+          {
+            "node": "Accounting Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Voice Question": {
+      "main": [
+        [
+          {
+            "node": "Accounting Support Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Accounting Support Agent": {
+      "main": [
+        [
+          {
+            "node": "Route Reply by Channel",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Route Reply by Channel": {
+      "main": [
+        [
+          {
+            "node": "WhatsApp Send AI Reply",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond to Voice Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "3d0f60af-1e34-4f17-886c-17fd36892eca",
+  "meta": {
+    "aiBuilderAssisted": true,
+    "builderVariant": "mcp",
+    "instanceId": "a02d9dd75e1472dd34ea6f0c2292e56e4c7f5268b29c8bd11d1743eeb468f68a"
+  },
+  "nodeGroups": [],
+  "id": "xIJOAWaEA3DhtBBk",
+  "tags": []
+}

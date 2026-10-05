@@ -1,0 +1,26 @@
+{
+  "name": "ca-crm",
+  "private": true,
+  "description": "CA Firm CRM: React frontend (Vite) + Node backend + Supabase Postgres",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "start": "node --env-file-if-exists=.env server.js",
+    "db:setup": "node --env-file-if-exists=.env db/setup.js",
+    "test": "node test.js"
+  },
+  "dependencies": {
+    "pg": "^8.23.1",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0"
+  },
+  "devDependencies": {
+    "@electric-sql/pglite": "^0.5.8",
+    "@electric-sql/pglite-socket": "^0.2.11",
+    "@vitejs/plugin-react": "^6.1.1",
+    "vite": "^8.3.2"
+  }
+}
